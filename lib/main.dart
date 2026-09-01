@@ -11,7 +11,7 @@ class PixelPomodoroApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Pink Pixel Pomodoro',
+      title: 'Pomodoro',
       theme: ThemeData(
         scaffoldBackgroundColor: const Color(0xFFFFF0F5), // Lavender Blush
         textTheme: GoogleFonts.pressStart2pTextTheme(),
