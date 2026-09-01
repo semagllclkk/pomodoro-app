@@ -72,9 +72,15 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text(
-                '(>‿<)',
-                style: TextStyle(fontSize: 48, color: Color(0xFFFF69B4)), // Hot Pink
+              // Header image from user-provided slices
+              Image.asset(
+                'assets/asset-sheet_slices/pomodoro-start.jpg',
+                width: 96,
+                height: 96,
+                errorBuilder: (c, e, s) => const Text(
+                  '(>‿<)',
+                  style: TextStyle(fontSize: 48, color: Color(0xFFFF69B4)),
+                ),
               ),
               const SizedBox(height: 20),
               const Text(
