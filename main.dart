@@ -30,49 +30,17 @@ class PomodoroScreen extends StatefulWidget {
 
 class _PomodoroScreenState extends State<PomodoroScreen> {
   static const int workDuration = 25 * 60;
-  static const int breakDuration = 5 * 60;
-
   int timeLeft = workDuration;
   bool isRunning = false;
-  String currentState = 'idle'; // 'idle', 'working', 'onBreak'
   Timer? timer;
 
-  String get currentAsset {
-    if (currentState == 'idle') {
-      return 'assets/asset-sheet_slices/uygulama-girisi.jpg';
-    } else if (currentState == 'working') {
-      return 'assets/asset-sheet_slices/odaklanma.jpg';
-    } else if (currentState == 'onBreak') {
-      return 'assets/asset-sheet_slices/mola.jpg';
-    }
-    return 'assets/asset-sheet_slices/uygulama-girisi.jpg';
-  }
-
   void startTimer() {
-    setState(() {
-      isRunning = true;
-      if (currentState == 'idle') {
-        currentState = 'working';
-        timeLeft = workDuration;
-      }
-    });
+    setState(() => isRunning = true);
     timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (timeLeft > 0) {
         setState(() => timeLeft--);
       } else {
-        // Timer ended: switch between work and break
-        if (currentState == 'working') {
-          setState(() {
-            currentState = 'onBreak';
-            timeLeft = breakDuration;
-          });
-        } else if (currentState == 'onBreak') {
-          stopTimer();
-          setState(() {
-            currentState = 'idle';
-            timeLeft = workDuration;
-          });
-        }
+        stopTimer();
       }
     });
   }
@@ -84,10 +52,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
 
   void resetTimer() {
     stopTimer();
-    setState(() {
-      currentState = 'idle';
-      timeLeft = workDuration;
-    });
+    setState(() => timeLeft = workDuration);
   }
 
   String get timerText {
@@ -107,35 +72,19 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Dynamic hero image: changes based on timer state
-              Hero(
-                tag: 'app-hero',
-                child: Image.asset(
-                  currentAsset,
-                  width: 160,
-                  height: 160,
-                  fit: BoxFit.contain,
-                  errorBuilder: (c, e, s) => const Text(
-                    '>-<',
-                    style: TextStyle(fontSize: 48, color: Color(0xFFFF69B4)),
-                  ),
-                ),
+              const Text(
+                '(>‿<)',
+                style: TextStyle(fontSize: 48, color: Color(0xFFFF69B4)), // Hot Pink
               ),
               const SizedBox(height: 20),
-              Text(
-                currentState == 'working'
-                    ? 'ODAKLANMA VAKTİ'
-                    : currentState == 'onBreak'
-                        ? 'MOLA VAKTİ'
-                        : 'BAŞLAMAYA HAZIR',
-                style: const TextStyle(
-                    fontSize: 24, color: Color(0xFFFFB6C1)), // Light Pink
+              const Text(
+                'ÇALIŞMA VAKTİ',
+                style: TextStyle(fontSize: 24, color: Color(0xFFFFB6C1)), // Light Pink
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 50),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+                padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFFC0CB), // Pink
                   borderRadius: BorderRadius.circular(16),
@@ -172,19 +121,8 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                     color: const Color(0xFFFFA07A), // Light Salmon
                   ),
                 ],
-              ),              const SizedBox(height: 20),
-              // Temporary button for testing break mode
-              _PixelButton(
-                text: 'MOLA TEST',
-                onPressed: () {
-                  stopTimer();
-                  setState(() {
-                    currentState = 'onBreak';
-                    timeLeft = breakDuration;
-                  });
-                },
-                color: const Color(0xFF87CEEB), // Sky Blue
-              ),            ],
+              ),
+            ],
           ),
         ),
       ),
