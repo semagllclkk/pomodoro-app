@@ -72,14 +72,18 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Header image from user-provided slices
-              Image.asset(
-                'assets/asset-sheet_slices/pomodoro-start.jpg',
-                width: 96,
-                height: 96,
-                errorBuilder: (c, e, s) => const Text(
-                  '(>‿<)',
-                  style: TextStyle(fontSize: 48, color: Color(0xFFFF69B4)),
+              // Header hero image from user-provided slices
+              Hero(
+                tag: 'app-hero',
+                child: Image.asset(
+                  'assets/asset-sheet_slices/uygulama-girisi.jpg',
+                  width: 160,
+                  height: 160,
+                  fit: BoxFit.contain,
+                  errorBuilder: (c, e, s) => const Text(
+                    '(>‿<)',
+                    style: TextStyle(fontSize: 48, color: Color(0xFFFF69B4)),
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
