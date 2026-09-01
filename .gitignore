@@ -6,6 +6,9 @@
 build/
 pubspec.lock
 
+# Local metadata
+.metadata
+
 # Windows artifacts
 *.exe
 *.dll
