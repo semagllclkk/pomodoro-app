@@ -112,8 +112,8 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                 tag: 'app-hero',
                 child: Image.asset(
                   currentAsset,
-                  width: 160,
-                  height: 160,
+                  width: 200,
+                  height: 200,
                   fit: BoxFit.contain,
                   errorBuilder: (c, e, s) => const Text(
                     '>-<',
@@ -132,10 +132,10 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                     fontSize: 24, color: Color(0xFFFFB6C1)), // Light Pink
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 50),
+              const SizedBox(height: 30),
               Container(
                 padding:
-                    const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+                    const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFFC0CB), // Pink
                   borderRadius: BorderRadius.circular(16),
@@ -150,13 +150,13 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                 child: Text(
                   timerText,
                   style: const TextStyle(
-                    fontSize: 72,
+                    fontSize: 48,
                     color: Colors.white,
                     letterSpacing: 4,
                   ),
                 ),
               ),
-              const SizedBox(height: 60),
+              const SizedBox(height: 30),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -208,7 +208,7 @@ class _PixelButton extends StatelessWidget {
     return GestureDetector(
       onTap: onPressed,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 18),
         decoration: BoxDecoration(
           color: color,
           border: Border.all(color: Colors.black, width: 3),
@@ -221,7 +221,7 @@ class _PixelButton extends StatelessWidget {
         ),
         child: Text(
           text,
-          style: const TextStyle(color: Colors.white, fontSize: 16),
+          style: const TextStyle(color: Colors.white, fontSize: 14),
         ),
       ),
     );
