@@ -85,12 +85,11 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   }
 
   Future<void> _startLoopMusic() async {
+    if (!musicEnabled) return;
     await loopPlayer.setReleaseMode(ReleaseMode.loop);
     await loopPlayer.setVolume(0.18);
-    await loopPlayer.setSource(AssetSource('sounds/loop.mp3'));
-    if (musicEnabled) {
-      await loopPlayer.resume();
-    }
+    if (!mounted || !musicEnabled) return;
+    await loopPlayer.play(AssetSource('sounds/loop.mp3'));
   }
 
   Future<void> _playClick() async {
@@ -99,8 +98,19 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     }
   }
 
-  Future<void> _playAlert() async {
+  Future<void> _startAlertLoop() async {
+    if (!soundEnabled) return;
+    await alertPlayer.setReleaseMode(ReleaseMode.loop);
     await alertPlayer.play(AssetSource('sounds/alert-warn.mp3'));
+  }
+
+  Future<void> _playAlert() async {
+    await _startAlertLoop();
+  }
+
+  Future<void> _stopAlert() async {
+    await alertPlayer.stop();
+    await alertPlayer.setReleaseMode(ReleaseMode.release);
   }
 
   void _startBlink() {
@@ -117,6 +127,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     _isBlinking = false;
     _blinkTimer?.cancel();
     _blinkTimer = null;
+    _stopAlert();
     if (mounted) setState(() => _blinkVisible = true);
   }
 
@@ -264,8 +275,14 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                     ? 'assets/asset-sheet_slices/ses-ac.png'
                     : 'assets/asset-sheet_slices/ses-kapa.png',
                 label: soundEnabled ? 'SES ACIK' : 'SES KAPALI',
-                onTap: () {
-                  setState(() => soundEnabled = !soundEnabled);
+                onTap: () async {
+                  final newValue = !soundEnabled;
+                  setState(() => soundEnabled = newValue);
+                  if (newValue && _isBlinking) {
+                    await _startAlertLoop();
+                  } else if (!newValue) {
+                    await _stopAlert();
+                  }
                   setDialogState(() {});
                 },
               ),
