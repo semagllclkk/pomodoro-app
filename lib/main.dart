@@ -14,7 +14,7 @@ class PixelPomodoroApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Pomodoro',
       theme: ThemeData(
-        scaffoldBackgroundColor: const Color(0xFFFFF0F5), // Lavender Blush
+        scaffoldBackgroundColor: const Color(0xFFFFBCC3),
         textTheme: GoogleFonts.pressStart2pTextTheme(),
       ),
       home: const PomodoroScreen(),
@@ -64,7 +64,10 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
   Future<void> _startLoopMusic() async {
     await loopPlayer.setReleaseMode(ReleaseMode.loop);
     await loopPlayer.setVolume(0.18);
-    await loopPlayer.play(AssetSource('sounds/loop.mp3'));
+    await loopPlayer.setSource(AssetSource('sounds/loop.mp3'));
+    if (musicEnabled) {
+      await loopPlayer.resume();
+    }
   }
 
   Future<void> _playClick() async {
@@ -74,12 +77,12 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
   }
 
   Future<void> _toggleMusic() async {
-    _playClick();
+    await _playClick();
     setState(() => musicEnabled = !musicEnabled);
     if (musicEnabled) {
       await _startLoopMusic();
     } else {
-      await loopPlayer.pause();
+      await loopPlayer.stop();
     }
   }
 
@@ -237,108 +240,111 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
   Widget build(BuildContext context) {
     // Tablet optimizasyonu için max genişlik sınırı
     return Scaffold(
-      body: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 600),
-          padding: const EdgeInsets.all(24.0),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Dynamic hero image: changes based on timer state
-                Hero(
-                  tag: 'app-hero',
-                  child: Image.asset(
-                    currentAsset,
-                    width: 240,
-                    height: 240,
-                    fit: BoxFit.contain,
-                    errorBuilder: (c, e, s) => const SizedBox.shrink(),
+      body: CustomPaint(
+        painter: _CrystalPainter(),
+        child: Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 600),
+            padding: const EdgeInsets.all(24.0),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Dynamic hero image: changes based on timer state
+                  Hero(
+                    tag: 'app-hero',
+                    child: Image.asset(
+                      currentAsset,
+                      width: 240,
+                      height: 240,
+                      fit: BoxFit.contain,
+                      errorBuilder: (c, e, s) => const SizedBox.shrink(),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  currentState == 'working'
-                      ? 'ODAKLANMA VAKTİ'
-                      : currentState == 'onBreak'
-                          ? 'MOLA VAKTİ'
-                          : 'BAŞLAMAYA HAZIR',
-                  style: const TextStyle(
-                      fontSize: 24, color: Color(0xFFFFB6C1)), // Light Pink
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 30),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFC0CB), // Pink
-                    borderRadius: BorderRadius.circular(16),
-                    border:
-                        Border.all(color: const Color(0xFFFF69B4), width: 4),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0xFFFF69B4),
-                        offset: Offset(4, 4),
-                      )
-                    ],
+                  const SizedBox(height: 20),
+                  Text(
+                    currentState == 'working'
+                        ? 'ODAKLANMA VAKTİ'
+                        : currentState == 'onBreak'
+                            ? 'MOLA VAKTİ'
+                            : 'BAŞLAMAYA HAZIR',
+                    style: const TextStyle(
+                        fontSize: 24, color: Color(0xFFFFB6C1)), // Light Pink
+                    textAlign: TextAlign.center,
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                  const SizedBox(height: 30),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 20, horizontal: 20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFC0CB), // Pink
+                      borderRadius: BorderRadius.circular(16),
+                      border:
+                          Border.all(color: const Color(0xFFFF69B4), width: 4),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0xFFFF69B4),
+                          offset: Offset(4, 4),
+                        )
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset('assets/asset-sheet_slices/time.jpg',
+                            width: 34, height: 34),
+                        const SizedBox(width: 8),
+                        Text(
+                          timerText,
+                          style: const TextStyle(
+                              fontSize: 48,
+                              color: Colors.white,
+                              letterSpacing: 4),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
                     children: [
-                      Image.asset('assets/asset-sheet_slices/time.jpg',
-                          width: 34, height: 34),
-                      const SizedBox(width: 8),
-                      Text(
-                        timerText,
-                        style: const TextStyle(
-                            fontSize: 48,
-                            color: Colors.white,
-                            letterSpacing: 4),
+                      _PixelButton(
+                        text: isRunning ? 'DURDUR' : 'BAŞLA',
+                        onPressed: isRunning ? stopTimer : startTimer,
+                        color: const Color(0xFFFF69B4),
+                        asset: 'assets/asset-sheet_slices/pomodoro-start.jpg',
+                      ),
+                      _PixelButton(
+                        text: 'SIFIRLA',
+                        onPressed: resetTimer,
+                        color: const Color(0xFFFF69B4),
+                        asset: 'assets/asset-sheet_slices/pomodoro-end.jpg',
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 30),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _PixelButton(
-                      text: isRunning ? 'DURDUR' : 'BAŞLA',
-                      onPressed: isRunning ? stopTimer : startTimer,
-                      color: const Color(0xFFFF69B4),
-                      asset: 'assets/asset-sheet_slices/pomodoro-start.jpg',
-                    ),
-                    const SizedBox(width: 20),
-                    _PixelButton(
-                      text: 'SIFIRLA',
-                      onPressed: resetTimer,
-                      color: const Color(0xFFFFA07A), // Light Salmon
-                      asset: 'assets/asset-sheet_slices/pomodoro-end.jpg',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                // Temporary button for testing break mode
-                _PixelButton(
-                  text: 'MOLA TEST',
-                  onPressed: () {
-                    stopTimer();
-                    setState(() {
-                      currentState = 'onBreak';
-                      timeLeft = breakDuration;
-                    });
-                  },
-                  color: const Color(0xFF87CEEB), // Sky Blue
-                  asset: 'assets/asset-sheet_slices/mola.jpg',
-                ),
-                const SizedBox(height: 12),
-                _AssetButton(
-                  asset: 'assets/asset-sheet_slices/settings.jpg',
-                  label: 'AYARLAR',
-                  onTap: openSettings,
-                ),
-              ],
+                  const SizedBox(height: 20),
+                  // Temporary button for testing break mode
+                  _PixelButton(
+                    text: 'MOLA TEST',
+                    onPressed: () {
+                      stopTimer();
+                      setState(() {
+                        currentState = 'onBreak';
+                        timeLeft = breakDuration;
+                      });
+                    },
+                    color: const Color(0xFF87CEEB), // Sky Blue
+                    asset: 'assets/asset-sheet_slices/mola.jpg',
+                  ),
+                  const SizedBox(height: 12),
+                  _AssetButton(
+                    asset: 'assets/asset-sheet_slices/settings.jpg',
+                    label: 'AYARLAR',
+                    onTap: openSettings,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -440,4 +446,40 @@ class _SettingRow extends StatelessWidget {
       ],
     );
   }
+}
+
+class _CrystalPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = const Color(0xFFFFE6EA);
+    const crystalSize = 4.0;
+    const points = [
+      Offset(28, 90),
+      Offset(92, 180),
+      Offset(220, 70),
+      Offset(330, 150),
+      Offset(470, 100),
+      Offset(560, 220),
+      Offset(42, 420),
+      Offset(500, 480),
+      Offset(150, 620),
+    ];
+    for (final point in points) {
+      canvas.drawRect(
+        Rect.fromCenter(center: point, width: crystalSize, height: 20),
+        paint,
+      );
+      canvas.drawRect(
+        Rect.fromCenter(center: point, width: 20, height: crystalSize),
+        paint,
+      );
+      canvas.drawRect(
+        Rect.fromCenter(center: point, width: 8, height: 8),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
