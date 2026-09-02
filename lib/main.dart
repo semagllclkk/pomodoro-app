@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -29,7 +30,8 @@ class PomodoroScreen extends StatefulWidget {
   State<PomodoroScreen> createState() => _PomodoroScreenState();
 }
 
-class _PomodoroScreenState extends State<PomodoroScreen> {
+class _PomodoroScreenState extends State<PomodoroScreen>
+    with TickerProviderStateMixin {
   static const int workDuration = 25 * 60;
   static const int breakDuration = 5 * 60;
 
@@ -41,8 +43,15 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
   bool musicEnabled = true;
   String currentState = 'idle'; // 'idle', 'working', 'onBreak'
   Timer? timer;
+
+  // Blink state
+  bool _blinkVisible = true;
+  Timer? _blinkTimer;
+  bool _isBlinking = false;
+
   final AudioPlayer clickPlayer = AudioPlayer();
   final AudioPlayer loopPlayer = AudioPlayer();
+  final AudioPlayer alertPlayer = AudioPlayer();
 
   String get currentAsset {
     if (currentState == 'idle') {
@@ -53,6 +62,20 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
       return 'assets/asset-sheet_slices/mola.jpg';
     }
     return 'assets/asset-sheet_slices/uygulama-girisi.jpg';
+  }
+
+  String get statusText {
+    if (currentState == 'working') return 'ODAKLANMA VAKTİ';
+    if (currentState == 'onBreak') return 'MOLA VAKTİ';
+    return 'BAŞLAMAYA HAZIR';
+  }
+
+  // Blink label shown during timer transitions or warnings
+  String? get blinkLabel {
+    if (currentState == 'working' && timeLeft == 0) return 'BİRAZ DİNLENME VAKTİ!';
+    if (currentState == 'onBreak' && timeLeft == 0) return 'ODAKLANMA VAKTİ!';
+    if (currentState == 'onBreak' && timeLeft <= 30 && timeLeft > 0) return 'MOLA BİTİYOR!';
+    return null;
   }
 
   @override
@@ -76,6 +99,27 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
     }
   }
 
+  Future<void> _playAlert() async {
+    await alertPlayer.play(AssetSource('sounds/alert-warn.mp3'));
+  }
+
+  void _startBlink() {
+    if (_isBlinking) return;
+    _isBlinking = true;
+    _blinkVisible = true;
+    _blinkTimer?.cancel();
+    _blinkTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (mounted) setState(() => _blinkVisible = !_blinkVisible);
+    });
+  }
+
+  void _stopBlink() {
+    _isBlinking = false;
+    _blinkTimer?.cancel();
+    _blinkTimer = null;
+    if (mounted) setState(() => _blinkVisible = true);
+  }
+
   Future<void> _toggleMusic(StateSetter? setDialogState) async {
     await _playClick();
     final newValue = !musicEnabled;
@@ -90,6 +134,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
 
   void startTimer() {
     _playClick();
+    _stopBlink();
     setState(() {
       isRunning = true;
       if (currentState == 'idle') {
@@ -97,21 +142,39 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
         timeLeft = configuredWorkMinutes * 60;
       }
     });
-    timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (timeLeft > 0) {
         setState(() => timeLeft--);
+        // Last 30 seconds of break warning
+        if (currentState == 'onBreak' && timeLeft == 30) {
+          _playAlert();
+          _startBlink();
+        }
+        if (currentState == 'onBreak' && timeLeft > 30 && _isBlinking) {
+          _stopBlink();
+        }
       } else {
         // Timer ended: switch between work and break
         if (currentState == 'working') {
+          _playAlert();
+          _startBlink();
           setState(() {
             currentState = 'onBreak';
             timeLeft = configuredBreakMinutes * 60;
           });
         } else if (currentState == 'onBreak') {
-          stopTimer();
+          _playAlert();
+          _stopBlink();
+          t.cancel();
           setState(() {
+            isRunning = false;
             currentState = 'idle';
-            timeLeft = workDuration;
+            timeLeft = configuredWorkMinutes * 60;
+          });
+          // Show "focus time" blink briefly
+          _startBlink();
+          Future.delayed(const Duration(seconds: 4), () {
+            if (mounted) _stopBlink();
           });
         }
       }
@@ -120,14 +183,17 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
 
   void stopTimer() {
     _playClick();
+    _stopBlink();
     setState(() => isRunning = false);
     timer?.cancel();
   }
 
   void resetTimer() {
     _playClick();
-    stopTimer();
+    _stopBlink();
+    timer?.cancel();
     setState(() {
+      isRunning = false;
       currentState = 'idle';
       timeLeft = configuredWorkMinutes * 60;
     });
@@ -159,16 +225,16 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                 value: configuredWorkMinutes,
                 onMinus: () => setDialogState(() {
                   if (configuredWorkMinutes > 1) {
-                    configuredWorkMinutes--;
+                    setState(() => configuredWorkMinutes--);
                   }
                   if (!isRunning && currentState == 'idle') {
-                    timeLeft = configuredWorkMinutes * 60;
+                    setState(() => timeLeft = configuredWorkMinutes * 60);
                   }
                 }),
                 onPlus: () => setDialogState(() {
-                  configuredWorkMinutes++;
+                  setState(() => configuredWorkMinutes++);
                   if (!isRunning && currentState == 'idle') {
-                    timeLeft = configuredWorkMinutes * 60;
+                    setState(() => timeLeft = configuredWorkMinutes * 60);
                   }
                 }),
               ),
@@ -220,15 +286,17 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                   Image.asset('assets/asset-sheet_slices/onay.png',
                       width: 32, height: 32),
                   const SizedBox(width: 8),
-                  Image.asset('assets/asset-sheet_slices/uyari.png',
-                      width: 32, height: 32),
                 ],
               ),
               const SizedBox(height: 10),
               _AssetButton(
-                  asset: 'assets/asset-sheet_slices/ret.png',
-                  label: 'CIKIS',
-                  onTap: () => Navigator.pop(context)),
+                asset: 'assets/asset-sheet_slices/ret.png',
+                label: 'UYGULAMADAN ÇIK',
+                onTap: () {
+                  Navigator.pop(context);
+                  _showExitConfirmation();
+                },
+              ),
             ],
           ),
         ),
@@ -236,11 +304,61 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
     );
   }
 
+  void _showExitConfirmation() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFFFFBCC3),
+        title: const Text('ÇIKIŞ', style: TextStyle(fontSize: 14)),
+        content: const Text(
+          'Uygulamadan çıkmak istediğine emin misin?',
+          style: TextStyle(fontSize: 10),
+        ),
+        actions: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              GestureDetector(
+                onTap: () => Navigator.pop(ctx),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset('assets/asset-sheet_slices/ret.png',
+                        width: 32, height: 32),
+                    const SizedBox(width: 4),
+                    const Text('HAYIR', style: TextStyle(fontSize: 9)),
+                  ],
+                ),
+              ),
+              GestureDetector(
+                onTap: () {
+                  Navigator.pop(ctx);
+                  SystemNavigator.pop();
+                },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset('assets/asset-sheet_slices/onay.png',
+                        width: 32, height: 32),
+                    const SizedBox(width: 4),
+                    const Text('EVET', style: TextStyle(fontSize: 9)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     timer?.cancel();
+    _blinkTimer?.cancel();
     clickPlayer.dispose();
     loopPlayer.dispose();
+    alertPlayer.dispose();
     super.dispose();
   }
 
@@ -252,7 +370,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Tablet optimizasyonu için max genişlik sınırı
+    final label = blinkLabel;
     return Scaffold(
       body: CustomPaint(
         painter: _CrystalPainter(),
@@ -264,7 +382,6 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Dynamic hero image: changes based on timer state
                   Hero(
                     tag: 'app-hero',
                     child: Image.asset(
@@ -276,23 +393,32 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Text(
-                    currentState == 'working'
-                        ? 'ODAKLANMA VAKTİ'
-                        : currentState == 'onBreak'
-                            ? 'MOLA VAKTİ'
-                            : 'BAŞLAMAYA HAZIR',
-                    style: const TextStyle(
-                        fontSize: 24, color: Color(0xFFFFB6C1)), // Light Pink
-                    textAlign: TextAlign.center,
-                  ),
+                  // Blink label OR normal status text
+                  if (label != null)
+                    AnimatedOpacity(
+                      opacity: _blinkVisible ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 100),
+                      child: Text(
+                        label,
+                        style: const TextStyle(
+                            fontSize: 16, color: Colors.white),
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  else
+                    Text(
+                      statusText,
+                      style: const TextStyle(
+                          fontSize: 24, color: Colors.white),
+                      textAlign: TextAlign.center,
+                    ),
                   const SizedBox(height: 30),
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(
                         vertical: 20, horizontal: 20),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFC0CB), // Pink
+                      color: const Color(0xFFFFC0CB),
                       borderRadius: BorderRadius.circular(20),
                       border:
                           Border.all(color: const Color(0xFFFF69B4), width: 4),
@@ -304,7 +430,6 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                       ],
                     ),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Image.asset('assets/asset-sheet_slices/time.jpg',
                             width: 34, height: 34),
@@ -348,7 +473,6 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                     ],
                   ),
                   const SizedBox(height: 20),
-                  // Temporary button for testing break mode
                   SizedBox(
                     width: double.infinity,
                     child: _PixelButton(
@@ -357,10 +481,10 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                         stopTimer();
                         setState(() {
                           currentState = 'onBreak';
-                          timeLeft = breakDuration;
+                          timeLeft = configuredBreakMinutes * 60;
                         });
                       },
-                      color: const Color(0xFF87CEEB), // Sky Blue
+                      color: const Color(0xFF87CEEB),
                       asset: 'assets/asset-sheet_slices/mola.jpg',
                     ),
                   ),
