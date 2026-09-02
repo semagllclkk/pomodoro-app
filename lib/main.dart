@@ -175,12 +175,22 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
               _SettingRow(
                 label: 'MOLA',
                 value: configuredBreakMinutes,
-                onMinus: () => setDialogState(() {
+                onMinus: () {
                   if (configuredBreakMinutes > 1) {
-                    configuredBreakMinutes--;
+                    setState(() => configuredBreakMinutes--);
+                    if (!isRunning && currentState == 'onBreak') {
+                      setState(() => timeLeft = configuredBreakMinutes * 60);
+                    }
+                    setDialogState(() {});
                   }
-                }),
-                onPlus: () => setDialogState(() => configuredBreakMinutes++),
+                },
+                onPlus: () {
+                  setState(() => configuredBreakMinutes++);
+                  if (!isRunning && currentState == 'onBreak') {
+                    setState(() => timeLeft = configuredBreakMinutes * 60);
+                  }
+                  setDialogState(() {});
+                },
               ),
               const SizedBox(height: 10),
               _AssetButton(
