@@ -76,10 +76,12 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
     }
   }
 
-  Future<void> _toggleMusic() async {
+  Future<void> _toggleMusic(StateSetter? setDialogState) async {
     await _playClick();
-    setState(() => musicEnabled = !musicEnabled);
-    if (musicEnabled) {
+    final newValue = !musicEnabled;
+    setState(() => musicEnabled = newValue);
+    setDialogState?.call(() {});
+    if (newValue) {
       await _startLoopMusic();
     } else {
       await loopPlayer.stop();
@@ -136,7 +138,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFFFFF0F5),
+        backgroundColor: const Color(0xFFFFBCC3),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -186,7 +188,10 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                     ? 'assets/asset-sheet_slices/ses-ac.png'
                     : 'assets/asset-sheet_slices/ses-kapa.png',
                 label: soundEnabled ? 'SES ACIK' : 'SES KAPALI',
-                onTap: () => setDialogState(() => soundEnabled = !soundEnabled),
+                onTap: () {
+                  setState(() => soundEnabled = !soundEnabled);
+                  setDialogState(() {});
+                },
               ),
               const SizedBox(height: 10),
               _AssetButton(
@@ -195,8 +200,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                     : 'assets/asset-sheet_slices/muzik-kapa.png',
                 label: musicEnabled ? 'MUZIK ACIK' : 'MUZIK KAPALI',
                 onTap: () async {
-                  await _toggleMusic();
-                  setDialogState(() {});
+                  await _toggleMusic(setDialogState);
                 },
               ),
               const SizedBox(height: 10),
@@ -274,11 +278,12 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                   ),
                   const SizedBox(height: 30),
                   Container(
+                    width: double.infinity,
                     padding: const EdgeInsets.symmetric(
                         vertical: 20, horizontal: 20),
                     decoration: BoxDecoration(
                       color: const Color(0xFFFFC0CB), // Pink
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(20),
                       border:
                           Border.all(color: const Color(0xFFFF69B4), width: 4),
                       boxShadow: const [
@@ -294,32 +299,41 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                         Image.asset('assets/asset-sheet_slices/time.jpg',
                             width: 34, height: 34),
                         const SizedBox(width: 8),
-                        Text(
-                          timerText,
-                          style: const TextStyle(
-                              fontSize: 48,
-                              color: Colors.white,
-                              letterSpacing: 4),
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              timerText,
+                              style: const TextStyle(
+                                  fontSize: 48,
+                                  color: Colors.white,
+                                  letterSpacing: 4),
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 30),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 12,
+                  const SizedBox(height: 24),
+                  Row(
                     children: [
-                      _PixelButton(
-                        text: isRunning ? 'DURDUR' : 'BAŞLA',
-                        onPressed: isRunning ? stopTimer : startTimer,
-                        color: const Color(0xFFFF69B4),
-                        asset: 'assets/asset-sheet_slices/pomodoro-start.jpg',
+                      Expanded(
+                        child: _PixelButton(
+                          text: isRunning ? 'DURDUR' : 'BAŞLA',
+                          onPressed: isRunning ? stopTimer : startTimer,
+                          color: const Color(0xFFFF69B4),
+                          asset: 'assets/asset-sheet_slices/pomodoro-start.jpg',
+                        ),
                       ),
-                      _PixelButton(
-                        text: 'SIFIRLA',
-                        onPressed: resetTimer,
-                        color: const Color(0xFFFF69B4),
-                        asset: 'assets/asset-sheet_slices/pomodoro-end.jpg',
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _PixelButton(
+                          text: 'SIFIRLA',
+                          onPressed: resetTimer,
+                          color: const Color(0xFFFF69B4),
+                          asset: 'assets/asset-sheet_slices/pomodoro-end.jpg',
+                        ),
                       ),
                     ],
                   ),
@@ -374,6 +388,7 @@ class _PixelButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 18),
         decoration: BoxDecoration(
           color: color,
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: Colors.black, width: 3),
           boxShadow: const [
             BoxShadow(
