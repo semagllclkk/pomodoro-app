@@ -331,7 +331,7 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                         child: _PixelButton(
                           text: 'SIFIRLA',
                           onPressed: resetTimer,
-                          color: const Color(0xFFFF69B4),
+                          color: const Color(0xFFFF6B6B),
                           asset: 'assets/asset-sheet_slices/pomodoro-end.jpg',
                         ),
                       ),
@@ -339,17 +339,20 @@ class _PomodoroScreenState extends State<PomodoroScreen> {
                   ),
                   const SizedBox(height: 20),
                   // Temporary button for testing break mode
-                  _PixelButton(
-                    text: 'MOLA TEST',
-                    onPressed: () {
-                      stopTimer();
-                      setState(() {
-                        currentState = 'onBreak';
-                        timeLeft = breakDuration;
-                      });
-                    },
-                    color: const Color(0xFF87CEEB), // Sky Blue
-                    asset: 'assets/asset-sheet_slices/mola.jpg',
+                  SizedBox(
+                    width: double.infinity,
+                    child: _PixelButton(
+                      text: 'MOLA TEST',
+                      onPressed: () {
+                        stopTimer();
+                        setState(() {
+                          currentState = 'onBreak';
+                          timeLeft = breakDuration;
+                        });
+                      },
+                      color: const Color(0xFF87CEEB), // Sky Blue
+                      asset: 'assets/asset-sheet_slices/mola.jpg',
+                    ),
                   ),
                   const SizedBox(height: 12),
                   _AssetButton(
@@ -385,7 +388,8 @@ class _PixelButton extends StatelessWidget {
     return GestureDetector(
       onTap: onPressed,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 18),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(16),
@@ -398,13 +402,19 @@ class _PixelButton extends StatelessWidget {
           ],
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (asset != null)
-              Image.asset(asset!, width: 28, height: 28, fit: BoxFit.contain),
+              Image.asset(asset!, width: 26, height: 26, fit: BoxFit.contain),
             if (asset != null) const SizedBox(width: 6),
-            Text(text,
-                style: const TextStyle(color: Colors.white, fontSize: 14)),
+            Flexible(
+              child: Text(
+                text,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
           ],
         ),
       ),

@@ -23,6 +23,7 @@ flutter:
   assets:
     - assets/
     - assets/asset-sheet_slices/
+    - assets/sounds/
 
 flutter_launcher_icons:
   android: "launcher_icon"
