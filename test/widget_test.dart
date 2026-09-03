@@ -51,8 +51,8 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Rapor'));
     await tester.pumpAndSettle();
 
-    expect(find.text('00:50:00'), findsOneWidget);
-    expect(find.text('Bugünün setleri: #1 #2'), findsOneWidget);
+    expect(find.text('00:50:00'), findsNWidgets(2));
+    expect(find.text('Bugünün son seti: #2'), findsOneWidget);
   });
 
   testWidgets('Skipping work and break records a session and set',
@@ -69,8 +69,8 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Rapor'));
     await tester.pumpAndSettle();
 
-    expect(find.text('00:25:00'), findsOneWidget);
-    expect(find.text('Bugünün setleri: #1'), findsOneWidget);
+    expect(find.text('00:25:00'), findsNWidgets(2));
+    expect(find.text('Bugünün son seti: #1'), findsOneWidget);
     await tester.tap(find.text('Detay'));
     await tester.pumpAndSettle();
     expect(find.text('00:25:00'), findsOneWidget);
@@ -85,7 +85,7 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Rapor'));
     await tester.pumpAndSettle();
 
-    expect(find.text('00:07:38'), findsOneWidget);
+    expect(find.text('00:07:38'), findsNWidgets(2));
     await tester.tap(find.text('Detay'));
     await tester.pumpAndSettle();
     expect(find.text('00:07:38'), findsOneWidget);
@@ -106,7 +106,7 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Rapor'));
     await tester.pumpAndSettle();
 
-    expect(find.text('00:25:00'), findsOneWidget);
+    expect(find.text('00:25:00'), findsNWidgets(2));
     expect(find.text('00:05:00'), findsOneWidget);
     await tester.tap(find.text('Detay'));
     await tester.pumpAndSettle();

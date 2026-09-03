@@ -961,23 +961,23 @@ class _SummaryView extends StatelessWidget {
           Text(
             todaySets.isEmpty
                 ? 'Bugün tamamlanan set yok'
-                : 'Bugünün setleri: ${todaySets.asMap().entries.map((entry) => '#${entry.key + 1}').join(' ')}',
+                : 'Bugünün son seti: #${todaySets.length}',
             style: const TextStyle(fontSize: 10, color: Color(0xFFE56B77)),
           ),
           const SizedBox(height: 28),
-          const Text('Odak Saatleri', style: TextStyle(fontSize: 13)),
+          const Text('Odak Süresi', style: TextStyle(fontSize: 13)),
           const Divider(height: 24),
           Container(
-            height: 150,
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            width: double.infinity,
             decoration: BoxDecoration(
+              color: const Color(0xFFFFE9EB),
               border: Border.all(color: const Color(0xFFE7E7E7)),
             ),
             child: Center(
               child: Text(
-                totalSeconds == 0
-                    ? 'Henüz tamamlanan oturum yok'
-                    : 'Toplam ${_formatDuration(totalSeconds)} odaklandın',
-                style: const TextStyle(fontSize: 10, color: Colors.grey),
+                _formatDuration(totalSeconds),
+                style: const TextStyle(fontSize: 18, color: Color(0xFFE56B77)),
               ),
             ),
           ),
