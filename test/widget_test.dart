@@ -22,7 +22,6 @@ void main() {
     expect(find.text('İLERİ SAR'), findsNothing);
     expect(find.text('AYARLAR'), findsNothing);
     expect(find.text('SIFIRLA'), findsOneWidget);
-    expect(find.text('MOLA TEST'), findsOneWidget);
   });
 
   testWidgets('Report opens with summary and detail tabs',

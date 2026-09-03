@@ -46,6 +46,8 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   String currentState = 'idle'; // 'idle', 'working', 'onBreak'
   Timer? timer;
   List<_FocusSession> focusSessions = [];
+  List<DateTime> activityDates = [];
+  List<DateTime> completedSets = [];
 
   // Blink state
   bool _blinkVisible = true;
@@ -55,6 +57,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   final AudioPlayer clickPlayer = AudioPlayer();
   final AudioPlayer loopPlayer = AudioPlayer();
   final AudioPlayer alertPlayer = AudioPlayer();
+  int _musicRequest = 0;
 
   String get currentAsset {
     if (currentState == 'idle') {
@@ -93,12 +96,46 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   Future<void> _loadFocusSessions() async {
     final preferences = await SharedPreferences.getInstance();
     final savedSessions = preferences.getStringList('focus_sessions') ?? [];
+    final savedActivityDates =
+        preferences.getStringList('activity_dates') ?? [];
+    final savedSets = preferences.getStringList('completed_sets') ?? [];
     if (!mounted) return;
     setState(() {
       focusSessions = savedSessions
           .map((value) => _FocusSession.fromJson(jsonDecode(value)))
           .toList();
+      activityDates = savedActivityDates.isNotEmpty
+          ? savedActivityDates.map(DateTime.parse).toList()
+          : focusSessions
+              .map((session) => session.completedAt)
+              .toSet()
+              .toList();
+      completedSets = savedSets.map(DateTime.parse).toList();
     });
+  }
+
+  String _dateKey(DateTime date) => '${date.year}-${date.month}-${date.day}';
+
+  Future<void> _recordActivityDate() async {
+    final today = DateTime.now();
+    if (activityDates.any((date) => _dateKey(date) == _dateKey(today))) return;
+    final updatedDates = [...activityDates, today];
+    setState(() => activityDates = updatedDates);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setStringList(
+      'activity_dates',
+      updatedDates.map((date) => date.toIso8601String()).toList(),
+    );
+  }
+
+  Future<void> _recordCompletedSet() async {
+    final updatedSets = [...completedSets, DateTime.now()];
+    setState(() => completedSets = updatedSets);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setStringList(
+      'completed_sets',
+      updatedSets.map((date) => date.toIso8601String()).toList(),
+    );
   }
 
   Future<void> _recordFocusSession() async {
@@ -116,11 +153,20 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   }
 
   Future<void> _startLoopMusic() async {
-    if (!musicEnabled) return;
+    if (!musicEnabled || isRunning) return;
+    final request = ++_musicRequest;
+    await loopPlayer.stop();
     await loopPlayer.setReleaseMode(ReleaseMode.loop);
     await loopPlayer.setVolume(0.18);
-    if (!mounted || !musicEnabled) return;
+    if (!mounted || !musicEnabled || isRunning || request != _musicRequest) {
+      return;
+    }
     await loopPlayer.play(AssetSource('sounds/loop.mp3'));
+  }
+
+  Future<void> _stopLoopMusic() async {
+    _musicRequest++;
+    await loopPlayer.stop();
   }
 
   Future<void> _playClick() async {
@@ -168,22 +214,25 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     setState(() => musicEnabled = newValue);
     setDialogState?.call(() {});
     if (newValue) {
-      await _startLoopMusic();
+      if (currentState == 'idle' && !isRunning) await _startLoopMusic();
     } else {
-      await loopPlayer.stop();
+      await _stopLoopMusic();
     }
   }
 
   void startTimer() {
     _playClick();
     _stopBlink();
+    _stopLoopMusic();
+    final startingWork = currentState == 'idle';
     setState(() {
       isRunning = true;
-      if (currentState == 'idle') {
+      if (startingWork) {
         currentState = 'working';
         timeLeft = configuredWorkMinutes * 60;
       }
     });
+    if (startingWork) _recordActivityDate();
     timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (timeLeft > 0) {
         setState(() => timeLeft--);
@@ -201,6 +250,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
           _playAlert();
           _startBlink();
           _recordFocusSession();
+          _stopLoopMusic();
           setState(() {
             currentState = 'onBreak';
             timeLeft = configuredBreakMinutes * 60;
@@ -214,6 +264,8 @@ class _PomodoroScreenState extends State<PomodoroScreen>
             currentState = 'idle';
             timeLeft = configuredWorkMinutes * 60;
           });
+          _recordCompletedSet();
+          _startLoopMusic();
           // Show "focus time" blink briefly
           _startBlink();
           Future.delayed(const Duration(seconds: 4), () {
@@ -229,6 +281,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     _stopBlink();
     setState(() => isRunning = false);
     timer?.cancel();
+    _startLoopMusic();
   }
 
   void resetTimer() {
@@ -240,6 +293,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       currentState = 'idle';
       timeLeft = configuredWorkMinutes * 60;
     });
+    _startLoopMusic();
   }
 
   void skipPhase() {
@@ -247,6 +301,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     if (currentState == 'idle') return;
     timer?.cancel();
     _stopBlink();
+    _stopLoopMusic();
     setState(() {
       if (currentState == 'working') {
         currentState = 'onBreak';
@@ -260,6 +315,8 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     });
     if (isRunning) {
       startTimer();
+    } else {
+      _startLoopMusic();
     }
   }
 
@@ -388,7 +445,11 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     _playClick();
     showDialog<void>(
       context: context,
-      builder: (context) => _ReportDialog(sessions: focusSessions),
+      builder: (context) => _ReportDialog(
+        sessions: focusSessions,
+        activityDates: activityDates,
+        completedSets: completedSets,
+      ),
     );
   }
 
@@ -607,33 +668,14 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                           ],
                         ),
                         const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _PixelButton(
-                                text: 'SIFIRLA',
-                                onPressed: resetTimer,
-                                color: const Color(0xFFFF6B6B),
-                                asset:
-                                    'assets/asset-sheet_slices/pomodoro-end.jpg',
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _PixelButton(
-                                text: 'MOLA TEST',
-                                onPressed: () {
-                                  stopTimer();
-                                  setState(() {
-                                    currentState = 'onBreak';
-                                    timeLeft = configuredBreakMinutes * 60;
-                                  });
-                                },
-                                color: const Color(0xFF87CEEB),
-                                asset: 'assets/asset-sheet_slices/mola.jpg',
-                              ),
-                            ),
-                          ],
+                        SizedBox(
+                          width: double.infinity,
+                          child: _PixelButton(
+                            text: 'SIFIRLA',
+                            onPressed: resetTimer,
+                            color: const Color(0xFFFF6B6B),
+                            asset: 'assets/asset-sheet_slices/pomodoro-end.jpg',
+                          ),
                         ),
                         const SizedBox(height: 12),
                       ],
@@ -677,14 +719,19 @@ class _FocusSession {
 
 class _ReportDialog extends StatelessWidget {
   final List<_FocusSession> sessions;
+  final List<DateTime> activityDates;
+  final List<DateTime> completedSets;
 
-  const _ReportDialog({required this.sessions});
+  const _ReportDialog({
+    required this.sessions,
+    required this.activityDates,
+    required this.completedSets,
+  });
 
   String _dateKey(DateTime date) => '${date.year}-${date.month}-${date.day}';
 
   int _streak() {
-    final days =
-        sessions.map((session) => _dateKey(session.completedAt)).toSet();
+    final days = activityDates.map(_dateKey).toSet();
     var day = DateTime.now();
     var count = 0;
     while (days.contains(_dateKey(day))) {
@@ -698,8 +745,7 @@ class _ReportDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final totalMinutes = sessions.fold<int>(
         0, (total, session) => total + session.durationMinutes);
-    final days =
-        sessions.map((session) => _dateKey(session.completedAt)).toSet();
+    final days = activityDates.map(_dateKey).toSet();
     final sortedSessions = [...sessions]
       ..sort((a, b) => b.completedAt.compareTo(a.completedAt));
 
@@ -747,6 +793,7 @@ class _ReportDialog extends StatelessWidget {
                       totalMinutes: totalMinutes,
                       dayCount: days.length,
                       streak: _streak(),
+                      completedSets: completedSets,
                     ),
                     _DetailView(sessions: sortedSessions),
                   ],
@@ -764,11 +811,13 @@ class _SummaryView extends StatelessWidget {
   final int totalMinutes;
   final int dayCount;
   final int streak;
+  final List<DateTime> completedSets;
 
   const _SummaryView({
     required this.totalMinutes,
     required this.dayCount,
     required this.streak,
+    required this.completedSets,
   });
 
   String _formatDuration(int totalMinutes) {
@@ -779,8 +828,13 @@ class _SummaryView extends StatelessWidget {
     return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
+  String _dateKey(DateTime date) => '${date.year}-${date.month}-${date.day}';
+
   @override
   Widget build(BuildContext context) {
+    final todayKey = _dateKey(DateTime.now());
+    final todaySets =
+        completedSets.where((date) => _dateKey(date) == todayKey).toList();
     return SingleChildScrollView(
       padding: const EdgeInsets.only(top: 20),
       child: Column(
@@ -804,6 +858,13 @@ class _SummaryView extends StatelessWidget {
               _ReportStat(
                   icon: 'seri.jpg', value: '$streak', label: 'günlük seri'),
             ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            todaySets.isEmpty
+                ? 'Bugün tamamlanan set yok'
+                : 'Bugünün setleri: ${todaySets.asMap().entries.map((entry) => '#${entry.key + 1}').join(' ')}',
+            style: const TextStyle(fontSize: 10, color: Color(0xFFE56B77)),
           ),
           const SizedBox(height: 28),
           const Text('Odak Saatleri', style: TextStyle(fontSize: 13)),
