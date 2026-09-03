@@ -50,6 +50,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   List<DateTime> completedSets = [];
   bool _workPhaseRecorded = false;
   int activeWorkSeconds = 0;
+  int activeBreakSeconds = 0;
 
   // Blink state
   bool _blinkVisible = true;
@@ -102,6 +103,8 @@ class _PomodoroScreenState extends State<PomodoroScreen>
         preferences.getStringList('activity_dates') ?? [];
     final savedSets = preferences.getStringList('completed_sets') ?? [];
     final savedActiveSeconds = preferences.getInt('active_work_seconds') ?? 0;
+    final savedActiveBreakSeconds =
+        preferences.getInt('active_break_seconds') ?? 0;
     if (!mounted) return;
     setState(() {
       focusSessions = savedSessions
@@ -122,6 +125,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
               .toList();
       completedSets = savedSets.map(DateTime.parse).toList();
       activeWorkSeconds = savedActiveSeconds;
+      activeBreakSeconds = savedActiveBreakSeconds;
     });
   }
 
@@ -170,9 +174,32 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     await preferences.remove('active_work_seconds');
   }
 
+  Future<void> _recordBreakSession() async {
+    if (activeBreakSeconds == 0) return;
+    final session = _FocusSession(
+      completedAt: DateTime.now(),
+      durationSeconds: activeBreakSeconds,
+      isBreak: true,
+    );
+    final updatedSessions = [...focusSessions, session];
+    setState(() => focusSessions = updatedSessions);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setStringList(
+      'focus_sessions',
+      updatedSessions.map((item) => jsonEncode(item.toJson())).toList(),
+    );
+    activeBreakSeconds = 0;
+    await preferences.remove('active_break_seconds');
+  }
+
   Future<void> _persistActiveWork() async {
     final preferences = await SharedPreferences.getInstance();
     await preferences.setInt('active_work_seconds', activeWorkSeconds);
+  }
+
+  Future<void> _persistActiveBreak() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setInt('active_break_seconds', activeBreakSeconds);
   }
 
   void _completeWorkPhase() {
@@ -183,6 +210,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     setState(() {
       currentState = 'onBreak';
       timeLeft = configuredBreakMinutes * 60;
+      activeBreakSeconds = 0;
     });
   }
 
@@ -195,7 +223,9 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       currentState = 'idle';
       timeLeft = configuredWorkMinutes * 60;
       _workPhaseRecorded = false;
+      activeBreakSeconds = 0;
     });
+    _recordBreakSession();
     _recordCompletedSet();
     _startLoopMusic();
     _startBlink();
@@ -291,6 +321,9 @@ class _PomodoroScreenState extends State<PomodoroScreen>
         if (currentState == 'working') {
           activeWorkSeconds++;
           _persistActiveWork();
+        } else if (currentState == 'onBreak') {
+          activeBreakSeconds++;
+          _persistActiveBreak();
         }
         setState(() => timeLeft--);
         // Last 30 seconds of break warning
@@ -325,8 +358,11 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     _stopBlink();
     timer?.cancel();
     activeWorkSeconds = 0;
-    SharedPreferences.getInstance()
-        .then((preferences) => preferences.remove('active_work_seconds'));
+    activeBreakSeconds = 0;
+    SharedPreferences.getInstance().then((preferences) async {
+      await preferences.remove('active_work_seconds');
+      await preferences.remove('active_break_seconds');
+    });
     setState(() {
       isRunning = false;
       currentState = 'idle';
@@ -474,6 +510,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
         activityDates: activityDates,
         completedSets: completedSets,
         activeWorkSeconds: activeWorkSeconds,
+        activeBreakSeconds: activeBreakSeconds,
       ),
     );
   }
@@ -719,10 +756,12 @@ class _PomodoroScreenState extends State<PomodoroScreen>
 class _FocusSession {
   final DateTime completedAt;
   final int durationSeconds;
+  final bool isBreak;
 
   const _FocusSession({
     required this.completedAt,
     required this.durationSeconds,
+    this.isBreak = false,
   });
 
   int get durationMinutes => durationSeconds ~/ 60;
@@ -735,12 +774,14 @@ class _FocusSession {
       durationSeconds: durationSeconds is int
           ? durationSeconds
           : (data['durationMinutes'] as int) * 60,
+      isBreak: data['isBreak'] == true,
     );
   }
 
   Map<String, dynamic> toJson() => {
         'completedAt': completedAt.toIso8601String(),
         'durationSeconds': durationSeconds,
+        'isBreak': isBreak,
       };
 }
 
@@ -749,12 +790,14 @@ class _ReportDialog extends StatelessWidget {
   final List<DateTime> activityDates;
   final List<DateTime> completedSets;
   final int activeWorkSeconds;
+  final int activeBreakSeconds;
 
   const _ReportDialog({
     required this.sessions,
     required this.activityDates,
     required this.completedSets,
     required this.activeWorkSeconds,
+    required this.activeBreakSeconds,
   });
 
   String _dateKey(DateTime date) => '${date.year}-${date.month}-${date.day}';
@@ -785,8 +828,19 @@ class _ReportDialog extends StatelessWidget {
         durationSeconds: activeWorkSeconds,
       ));
     }
-    final totalSeconds = reportSessions.fold<int>(
-        0, (total, session) => total + session.durationSeconds);
+    if (activeBreakSeconds > 0) {
+      reportSessions.add(_FocusSession(
+        completedAt: DateTime.now(),
+        durationSeconds: activeBreakSeconds,
+        isBreak: true,
+      ));
+    }
+    final focusSeconds = reportSessions
+        .where((session) => !session.isBreak)
+        .fold<int>(0, (total, session) => total + session.durationSeconds);
+    final breakSeconds = reportSessions
+        .where((session) => session.isBreak)
+        .fold<int>(0, (total, session) => total + session.durationSeconds);
     final days = activityDates.map(_dateKey).toSet();
     final sortedSessions = [...reportSessions]
       ..sort((a, b) => b.completedAt.compareTo(a.completedAt));
@@ -832,7 +886,8 @@ class _ReportDialog extends StatelessWidget {
                 child: TabBarView(
                   children: [
                     _SummaryView(
-                      totalSeconds: totalSeconds,
+                      totalSeconds: focusSeconds,
+                      breakSeconds: breakSeconds,
                       dayCount: days.length,
                       streak: _streak(),
                       completedSets: completedSets,
@@ -851,12 +906,14 @@ class _ReportDialog extends StatelessWidget {
 
 class _SummaryView extends StatelessWidget {
   final int totalSeconds;
+  final int breakSeconds;
   final int dayCount;
   final int streak;
   final List<DateTime> completedSets;
 
   const _SummaryView({
     required this.totalSeconds,
+    required this.breakSeconds,
     required this.dayCount,
     required this.streak,
     required this.completedSets,
@@ -921,6 +978,23 @@ class _SummaryView extends StatelessWidget {
                     ? 'Henüz tamamlanan oturum yok'
                     : 'Toplam ${_formatDuration(totalSeconds)} odaklandın',
                 style: const TextStyle(fontSize: 10, color: Colors.grey),
+              ),
+            ),
+          ),
+          const SizedBox(height: 28),
+          const Text('Mola Süresi', style: TextStyle(fontSize: 13)),
+          const Divider(height: 24),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFE9EB),
+              border: Border.all(color: const Color(0xFFE7E7E7)),
+            ),
+            child: Center(
+              child: Text(
+                _formatDuration(breakSeconds),
+                style: const TextStyle(fontSize: 18, color: Color(0xFFE56B77)),
               ),
             ),
           ),
@@ -991,11 +1065,13 @@ class _DetailView extends StatelessWidget {
             '${session.completedAt.day.toString().padLeft(2, '0')}.${session.completedAt.month.toString().padLeft(2, '0')}.${session.completedAt.year}';
         final time =
             '${session.completedAt.hour.toString().padLeft(2, '0')}:${session.completedAt.minute.toString().padLeft(2, '0')}';
+        final icon = session.isBreak ? 'mola.jpg' : 'pomodoro-start.jpg';
+        final type = session.isBreak ? 'Mola' : 'Odak';
         return ListTile(
           dense: true,
-          leading: Image.asset('assets/asset-sheet_slices/list.jpg',
+          leading: Image.asset('assets/asset-sheet_slices/$icon',
               width: 25, height: 25),
-          title: Text(date, style: const TextStyle(fontSize: 10)),
+          title: Text('$date  $type', style: const TextStyle(fontSize: 10)),
           subtitle: Text(time,
               style: const TextStyle(fontSize: 8, color: Colors.grey)),
           trailing: Text(_formatDetailDuration(session.durationSeconds),

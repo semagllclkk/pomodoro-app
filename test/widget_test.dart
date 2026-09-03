@@ -90,4 +90,27 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('00:07:38'), findsOneWidget);
   });
+
+  testWidgets('Report separates focus and break durations',
+      (WidgetTester tester) async {
+    final now = DateTime.now().toIso8601String();
+    SharedPreferences.setMockInitialValues({
+      'focus_sessions': [
+        '{"completedAt":"$now","durationSeconds":1500,"isBreak":false}',
+        '{"completedAt":"$now","durationSeconds":300,"isBreak":true}',
+      ],
+    });
+
+    await tester.pumpWidget(const PixelPomodoroApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('Rapor'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('00:25:00'), findsOneWidget);
+    expect(find.text('00:05:00'), findsOneWidget);
+    await tester.tap(find.text('Detay'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Odak'), findsOneWidget);
+    expect(find.textContaining('Mola'), findsOneWidget);
+  });
 }
