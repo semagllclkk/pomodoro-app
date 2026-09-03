@@ -1,17 +1,24 @@
-# pomodoro_app
+# Pomodoro App
 
-A new Flutter project.
+Pixel temalı, yerel kayıt destekli bir Pomodoro uygulaması.
 
-## Getting Started
+## Uygulama Ekran Görüntüleri
 
-This project is a starting point for a Flutter application.
+Uygulama içi ekran görüntülerini [ekran-goruntuleri](assets/ekran-goruntuleri/) klasörüne ekleyebilirsin.
 
-A few resources to get you started if this is your first Flutter project:
+Yeni bir görsel eklediğinde README'de şu formatı kullan:
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+```markdown
+![Ana ekran](assets/ekran-goruntuleri/ana-ekran.png)
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Çalıştırma
+
+```bash
+flutter pub get
+flutter run
+```
+
+## Raporlama
+
+Odak ve mola süreleri cihazın yerel depolamasında tutulur. Rapor ekranında toplam süre, günlük aktivite, setler ve oturum detayları gösterilir.

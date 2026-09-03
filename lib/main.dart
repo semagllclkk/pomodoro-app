@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() => runApp(const PixelPomodoroApp());
 
@@ -43,6 +45,12 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   bool musicEnabled = true;
   String currentState = 'idle'; // 'idle', 'working', 'onBreak'
   Timer? timer;
+  List<_FocusSession> focusSessions = [];
+  List<DateTime> activityDates = [];
+  List<DateTime> completedSets = [];
+  bool _workPhaseRecorded = false;
+  int activeWorkSeconds = 0;
+  int activeBreakSeconds = 0;
 
   // Blink state
   bool _blinkVisible = true;
@@ -52,6 +60,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   final AudioPlayer clickPlayer = AudioPlayer();
   final AudioPlayer loopPlayer = AudioPlayer();
   final AudioPlayer alertPlayer = AudioPlayer();
+  int _musicRequest = 0;
 
   String get currentAsset {
     if (currentState == 'idle') {
@@ -72,24 +81,174 @@ class _PomodoroScreenState extends State<PomodoroScreen>
 
   // Blink label shown during timer transitions or warnings
   String? get blinkLabel {
-    if (currentState == 'working' && timeLeft == 0) return 'BİRAZ DİNLENME VAKTİ!';
+    if (currentState == 'working' && timeLeft == 0)
+      return 'BİRAZ DİNLENME VAKTİ!';
     if (currentState == 'onBreak' && timeLeft == 0) return 'ODAKLANMA VAKTİ!';
-    if (currentState == 'onBreak' && timeLeft <= 30 && timeLeft > 0) return 'MOLA BİTİYOR!';
+    if (currentState == 'onBreak' && timeLeft <= 30 && timeLeft > 0)
+      return 'MOLA BİTİYOR!';
     return null;
   }
 
   @override
   void initState() {
     super.initState();
+    _loadFocusSessions();
     _startLoopMusic();
   }
 
+  Future<void> _loadFocusSessions() async {
+    final preferences = await SharedPreferences.getInstance();
+    final savedSessions = preferences.getStringList('focus_sessions') ?? [];
+    final savedActivityDates =
+        preferences.getStringList('activity_dates') ?? [];
+    final savedSets = preferences.getStringList('completed_sets') ?? [];
+    final savedActiveSeconds = preferences.getInt('active_work_seconds') ?? 0;
+    final savedActiveBreakSeconds =
+        preferences.getInt('active_break_seconds') ?? 0;
+    if (!mounted) return;
+    setState(() {
+      focusSessions = savedSessions
+          .map((value) {
+            try {
+              return _FocusSession.fromJson(jsonDecode(value));
+            } catch (_) {
+              return null;
+            }
+          })
+          .whereType<_FocusSession>()
+          .toList();
+      activityDates = savedActivityDates.isNotEmpty
+          ? savedActivityDates.map(DateTime.parse).toList()
+          : focusSessions
+              .map((session) => session.completedAt)
+              .toSet()
+              .toList();
+      completedSets = savedSets.map(DateTime.parse).toList();
+      activeWorkSeconds = savedActiveSeconds;
+      activeBreakSeconds = savedActiveBreakSeconds;
+    });
+  }
+
+  String _dateKey(DateTime date) => '${date.year}-${date.month}-${date.day}';
+
+  Future<void> _recordActivityDate() async {
+    final today = DateTime.now();
+    if (activityDates.any((date) => _dateKey(date) == _dateKey(today))) return;
+    final updatedDates = [...activityDates, today];
+    setState(() => activityDates = updatedDates);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setStringList(
+      'activity_dates',
+      updatedDates.map((date) => date.toIso8601String()).toList(),
+    );
+  }
+
+  Future<void> _recordCompletedSet() async {
+    final updatedSets = [...completedSets, DateTime.now()];
+    setState(() => completedSets = updatedSets);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setStringList(
+      'completed_sets',
+      updatedSets.map((date) => date.toIso8601String()).toList(),
+    );
+  }
+
+  Future<void> _recordFocusSession() async {
+    if (_workPhaseRecorded) return;
+    _workPhaseRecorded = true;
+    final session = _FocusSession(
+      completedAt: DateTime.now(),
+      durationSeconds: activeWorkSeconds,
+    );
+    final updatedSessions = [
+      ...focusSessions,
+      session,
+    ];
+    setState(() => focusSessions = updatedSessions);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setStringList(
+      'focus_sessions',
+      updatedSessions.map((item) => jsonEncode(item.toJson())).toList(),
+    );
+    activeWorkSeconds = 0;
+    await preferences.remove('active_work_seconds');
+  }
+
+  Future<void> _recordBreakSession() async {
+    if (activeBreakSeconds == 0) return;
+    final session = _FocusSession(
+      completedAt: DateTime.now(),
+      durationSeconds: activeBreakSeconds,
+      isBreak: true,
+    );
+    final updatedSessions = [...focusSessions, session];
+    setState(() => focusSessions = updatedSessions);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setStringList(
+      'focus_sessions',
+      updatedSessions.map((item) => jsonEncode(item.toJson())).toList(),
+    );
+    activeBreakSeconds = 0;
+    await preferences.remove('active_break_seconds');
+  }
+
+  Future<void> _persistActiveWork() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setInt('active_work_seconds', activeWorkSeconds);
+  }
+
+  Future<void> _persistActiveBreak() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setInt('active_break_seconds', activeBreakSeconds);
+  }
+
+  void _completeWorkPhase() {
+    _playAlert();
+    _startBlink();
+    _recordFocusSession();
+    _stopLoopMusic();
+    setState(() {
+      currentState = 'onBreak';
+      timeLeft = configuredBreakMinutes * 60;
+      activeBreakSeconds = 0;
+    });
+  }
+
+  void _completeBreakPhase() {
+    _playAlert();
+    _stopBlink();
+    timer?.cancel();
+    setState(() {
+      isRunning = false;
+      currentState = 'idle';
+      timeLeft = configuredWorkMinutes * 60;
+      _workPhaseRecorded = false;
+      activeBreakSeconds = 0;
+    });
+    _recordBreakSession();
+    _recordCompletedSet();
+    _startLoopMusic();
+    _startBlink();
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) _stopBlink();
+    });
+  }
+
   Future<void> _startLoopMusic() async {
-    if (!musicEnabled) return;
+    if (!musicEnabled || isRunning) return;
+    final request = ++_musicRequest;
+    await loopPlayer.stop();
     await loopPlayer.setReleaseMode(ReleaseMode.loop);
     await loopPlayer.setVolume(0.18);
-    if (!mounted || !musicEnabled) return;
+    if (!mounted || !musicEnabled || isRunning || request != _musicRequest) {
+      return;
+    }
     await loopPlayer.play(AssetSource('sounds/loop.mp3'));
+  }
+
+  Future<void> _stopLoopMusic() async {
+    _musicRequest++;
+    await loopPlayer.stop();
   }
 
   Future<void> _playClick() async {
@@ -137,24 +296,35 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     setState(() => musicEnabled = newValue);
     setDialogState?.call(() {});
     if (newValue) {
-      await _startLoopMusic();
+      if (currentState == 'idle' && !isRunning) await _startLoopMusic();
     } else {
-      await loopPlayer.stop();
+      await _stopLoopMusic();
     }
   }
 
   void startTimer() {
     _playClick();
     _stopBlink();
+    _stopLoopMusic();
+    final startingWork = currentState == 'idle';
     setState(() {
       isRunning = true;
-      if (currentState == 'idle') {
+      if (startingWork) {
         currentState = 'working';
         timeLeft = configuredWorkMinutes * 60;
+        _workPhaseRecorded = false;
       }
     });
+    if (startingWork) _recordActivityDate();
     timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (timeLeft > 0) {
+        if (currentState == 'working') {
+          activeWorkSeconds++;
+          _persistActiveWork();
+        } else if (currentState == 'onBreak') {
+          activeBreakSeconds++;
+          _persistActiveBreak();
+        }
         setState(() => timeLeft--);
         // Last 30 seconds of break warning
         if (currentState == 'onBreak' && timeLeft == 30) {
@@ -167,26 +337,9 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       } else {
         // Timer ended: switch between work and break
         if (currentState == 'working') {
-          _playAlert();
-          _startBlink();
-          setState(() {
-            currentState = 'onBreak';
-            timeLeft = configuredBreakMinutes * 60;
-          });
+          _completeWorkPhase();
         } else if (currentState == 'onBreak') {
-          _playAlert();
-          _stopBlink();
-          t.cancel();
-          setState(() {
-            isRunning = false;
-            currentState = 'idle';
-            timeLeft = configuredWorkMinutes * 60;
-          });
-          // Show "focus time" blink briefly
-          _startBlink();
-          Future.delayed(const Duration(seconds: 4), () {
-            if (mounted) _stopBlink();
-          });
+          _completeBreakPhase();
         }
       }
     });
@@ -197,17 +350,53 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     _stopBlink();
     setState(() => isRunning = false);
     timer?.cancel();
+    _startLoopMusic();
   }
 
   void resetTimer() {
     _playClick();
     _stopBlink();
     timer?.cancel();
+    activeWorkSeconds = 0;
+    activeBreakSeconds = 0;
+    SharedPreferences.getInstance().then((preferences) async {
+      await preferences.remove('active_work_seconds');
+      await preferences.remove('active_break_seconds');
+    });
     setState(() {
       isRunning = false;
       currentState = 'idle';
       timeLeft = configuredWorkMinutes * 60;
     });
+    _startLoopMusic();
+  }
+
+  void skipPhase() {
+    _playClick();
+    if (currentState == 'idle') return;
+    timer?.cancel();
+    _stopBlink();
+    _stopLoopMusic();
+    if (currentState == 'working') {
+      activeWorkSeconds += timeLeft;
+      _completeWorkPhase();
+      isRunning = true;
+    } else {
+      _completeBreakPhase();
+    }
+    if (isRunning) {
+      startTimer();
+    }
+  }
+
+  void fastForward() {
+    _playClick();
+    if (currentState == 'idle') return;
+    if (timeLeft > 60) {
+      setState(() => timeLeft -= 60);
+      return;
+    }
+    skipPhase();
   }
 
   void openSettings() {
@@ -297,15 +486,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                 },
               ),
               const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Image.asset('assets/asset-sheet_slices/onay.png',
-                      width: 32, height: 32),
-                  const SizedBox(width: 8),
-                ],
-              ),
-              const SizedBox(height: 10),
               _AssetButton(
                 asset: 'assets/asset-sheet_slices/ret.png',
                 label: 'UYGULAMADAN ÇIK',
@@ -321,12 +501,33 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     );
   }
 
+  void openReport() {
+    _playClick();
+    showDialog<void>(
+      context: context,
+      builder: (context) => _ReportDialog(
+        sessions: focusSessions,
+        activityDates: activityDates,
+        completedSets: completedSets,
+        activeWorkSeconds: activeWorkSeconds,
+        activeBreakSeconds: activeBreakSeconds,
+      ),
+    );
+  }
+
   void _showExitConfirmation() {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFFFFBCC3),
-        title: const Text('ÇIKIŞ', style: TextStyle(fontSize: 14)),
+        title: Row(
+          children: [
+            Image.asset('assets/asset-sheet_slices/pomodoro-end.jpg',
+                width: 32, height: 32),
+            const SizedBox(width: 8),
+            const Text('ÇIKIŞ', style: TextStyle(fontSize: 14)),
+          ],
+        ),
         content: const Text(
           'Uygulamadan çıkmak istediğine emin misin?',
           style: TextStyle(fontSize: 10),
@@ -389,131 +590,162 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   Widget build(BuildContext context) {
     final label = blinkLabel;
     return Scaffold(
-      body: CustomPaint(
-        painter: _CrystalPainter(),
-        child: Center(
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 600),
-            padding: const EdgeInsets.all(24.0),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Hero(
-                    tag: 'app-hero',
-                    child: Image.asset(
-                      currentAsset,
-                      width: 240,
-                      height: 240,
-                      fit: BoxFit.contain,
-                      errorBuilder: (c, e, s) => const SizedBox.shrink(),
+      body: SafeArea(
+        child: CustomPaint(
+          painter: _CrystalPainter(),
+          child: Stack(
+            children: [
+              Positioned(
+                top: 8,
+                right: 16,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _AssetButton(
+                      asset: 'assets/asset-sheet_slices/istatistik.jpg',
+                      onTap: openReport,
+                      semanticsLabel: 'Rapor',
+                      size: 34,
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  // Blink label OR normal status text
-                  if (label != null)
-                    AnimatedOpacity(
-                      opacity: _blinkVisible ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 100),
-                      child: Text(
-                        label,
-                        style: const TextStyle(
-                            fontSize: 16, color: Colors.white),
-                        textAlign: TextAlign.center,
-                      ),
-                    )
-                  else
-                    Text(
-                      statusText,
-                      style: const TextStyle(
-                          fontSize: 24, color: Colors.white),
-                      textAlign: TextAlign.center,
+                    const SizedBox(width: 8),
+                    _AssetButton(
+                      asset: 'assets/asset-sheet_slices/settings.jpg',
+                      onTap: openSettings,
+                      semanticsLabel: 'Ayarlar',
+                      size: 34,
                     ),
-                  const SizedBox(height: 30),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 20, horizontal: 20),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFC0CB),
-                      borderRadius: BorderRadius.circular(20),
-                      border:
-                          Border.all(color: const Color(0xFFFF69B4), width: 4),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0xFFFF69B4),
-                          offset: Offset(4, 4),
-                        )
-                      ],
-                    ),
-                    child: Row(
+                  ],
+                ),
+              ),
+              Center(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  padding: const EdgeInsets.all(24.0),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Image.asset('assets/asset-sheet_slices/time.jpg',
-                            width: 34, height: 34),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              timerText,
-                              style: const TextStyle(
-                                  fontSize: 48,
-                                  color: Colors.white,
-                                  letterSpacing: 4),
-                            ),
+                        Hero(
+                          tag: 'app-hero',
+                          child: Image.asset(
+                            currentAsset,
+                            width: 220,
+                            height: 220,
+                            fit: BoxFit.contain,
+                            errorBuilder: (c, e, s) => const SizedBox.shrink(),
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        // Blink label OR normal status text
+                        if (label != null)
+                          AnimatedOpacity(
+                            opacity: _blinkVisible ? 1.0 : 0.0,
+                            duration: const Duration(milliseconds: 100),
+                            child: Text(
+                              label,
+                              style: const TextStyle(
+                                  fontSize: 16, color: Colors.white),
+                              textAlign: TextAlign.center,
+                            ),
+                          )
+                        else
+                          Text(
+                            statusText,
+                            style: const TextStyle(
+                                fontSize: 24, color: Colors.white),
+                            textAlign: TextAlign.center,
+                          ),
+                        const SizedBox(height: 20),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 14, horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFC0CB),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                                color: const Color(0xFFFF69B4), width: 4),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0xFFFF69B4),
+                                offset: Offset(4, 4),
+                              )
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Image.asset('assets/asset-sheet_slices/saat.jpg',
+                                  width: 30, height: 30),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    timerText,
+                                    style: const TextStyle(
+                                        fontSize: 42,
+                                        color: Colors.white,
+                                        letterSpacing: 3),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: _PixelButton(
+                                text: isRunning ? 'DURDUR' : 'BAŞLA',
+                                onPressed: isRunning ? stopTimer : startTimer,
+                                color: const Color(0xFFFF69B4),
+                                asset:
+                                    'assets/asset-sheet_slices/pomodoro-start.jpg',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _PixelButton(
+                                text: null,
+                                semanticsLabel: 'Atla',
+                                onPressed: skipPhase,
+                                color: const Color(0xFFB98AD9),
+                                asset: 'assets/asset-sheet_slices/atla.jpg',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _PixelButton(
+                                text: null,
+                                semanticsLabel: 'İleri sar',
+                                onPressed: fastForward,
+                                color: const Color(0xFF8EBCD1),
+                                asset:
+                                    'assets/asset-sheet_slices/ileri-sar.jpg',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: _PixelButton(
+                            text: 'SIFIRLA',
+                            onPressed: resetTimer,
+                            color: const Color(0xFFFF6B6B),
+                            asset: 'assets/asset-sheet_slices/pomodoro-end.jpg',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _PixelButton(
-                          text: isRunning ? 'DURDUR' : 'BAŞLA',
-                          onPressed: isRunning ? stopTimer : startTimer,
-                          color: const Color(0xFFFF69B4),
-                          asset: 'assets/asset-sheet_slices/pomodoro-start.jpg',
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _PixelButton(
-                          text: 'SIFIRLA',
-                          onPressed: resetTimer,
-                          color: const Color(0xFFFF6B6B),
-                          asset: 'assets/asset-sheet_slices/pomodoro-end.jpg',
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: _PixelButton(
-                      text: 'MOLA TEST',
-                      onPressed: () {
-                        stopTimer();
-                        setState(() {
-                          currentState = 'onBreak';
-                          timeLeft = configuredBreakMinutes * 60;
-                        });
-                      },
-                      color: const Color(0xFF87CEEB),
-                      asset: 'assets/asset-sheet_slices/mola.jpg',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _AssetButton(
-                    asset: 'assets/asset-sheet_slices/settings.jpg',
-                    label: 'AYARLAR',
-                    onTap: openSettings,
-                  ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -521,52 +753,388 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   }
 }
 
+class _FocusSession {
+  final DateTime completedAt;
+  final int durationSeconds;
+  final bool isBreak;
+
+  const _FocusSession({
+    required this.completedAt,
+    required this.durationSeconds,
+    this.isBreak = false,
+  });
+
+  int get durationMinutes => durationSeconds ~/ 60;
+
+  factory _FocusSession.fromJson(dynamic json) {
+    final data = json as Map<String, dynamic>;
+    final durationSeconds = data['durationSeconds'];
+    return _FocusSession(
+      completedAt: DateTime.parse(data['completedAt'] as String),
+      durationSeconds: durationSeconds is int
+          ? durationSeconds
+          : (data['durationMinutes'] as int) * 60,
+      isBreak: data['isBreak'] == true,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'completedAt': completedAt.toIso8601String(),
+        'durationSeconds': durationSeconds,
+        'isBreak': isBreak,
+      };
+}
+
+class _ReportDialog extends StatelessWidget {
+  final List<_FocusSession> sessions;
+  final List<DateTime> activityDates;
+  final List<DateTime> completedSets;
+  final int activeWorkSeconds;
+  final int activeBreakSeconds;
+
+  const _ReportDialog({
+    required this.sessions,
+    required this.activityDates,
+    required this.completedSets,
+    required this.activeWorkSeconds,
+    required this.activeBreakSeconds,
+  });
+
+  String _dateKey(DateTime date) => '${date.year}-${date.month}-${date.day}';
+
+  int _streak() {
+    final days = activityDates.map(_dateKey).toSet();
+    var day = DateTime.now();
+    var count = 0;
+    while (days.contains(_dateKey(day))) {
+      count++;
+      day = day.subtract(const Duration(days: 1));
+    }
+    return count;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reportSessions = [...sessions];
+    if (reportSessions.isEmpty) {
+      reportSessions.addAll(completedSets.map((date) => _FocusSession(
+            completedAt: date,
+            durationSeconds: 25 * 60,
+          )));
+    }
+    if (activeWorkSeconds > 0) {
+      reportSessions.add(_FocusSession(
+        completedAt: DateTime.now(),
+        durationSeconds: activeWorkSeconds,
+      ));
+    }
+    if (activeBreakSeconds > 0) {
+      reportSessions.add(_FocusSession(
+        completedAt: DateTime.now(),
+        durationSeconds: activeBreakSeconds,
+        isBreak: true,
+      ));
+    }
+    final focusSeconds = reportSessions
+        .where((session) => !session.isBreak)
+        .fold<int>(0, (total, session) => total + session.durationSeconds);
+    final breakSeconds = reportSessions
+        .where((session) => session.isBreak)
+        .fold<int>(0, (total, session) => total + session.durationSeconds);
+    final days = activityDates.map(_dateKey).toSet();
+    final sortedSessions = [...reportSessions]
+      ..sort((a, b) => b.completedAt.compareTo(a.completedAt));
+
+    return DefaultTabController(
+      length: 2,
+      child: AlertDialog(
+        backgroundColor: const Color(0xFFFFE6EA),
+        titlePadding: const EdgeInsets.fromLTRB(18, 12, 10, 0),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('RAPOR', style: TextStyle(fontSize: 16)),
+            _AssetButton(
+              asset: 'assets/asset-sheet_slices/ret.png',
+              onTap: () => Navigator.pop(context),
+              semanticsLabel: 'Kapat',
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 500,
+          height: 440,
+          child: Column(
+            children: [
+              TabBar(
+                labelColor: Color(0xFFE56B77),
+                unselectedLabelColor: Colors.grey,
+                tabs: [
+                  Tab(
+                      icon: Image.asset(
+                          'assets/asset-sheet_slices/istatistik.jpg',
+                          width: 30,
+                          height: 30),
+                      text: 'Özet'),
+                  Tab(
+                      icon: Image.asset('assets/asset-sheet_slices/list.jpg',
+                          width: 30, height: 30),
+                      text: 'Detay'),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _SummaryView(
+                      totalSeconds: focusSeconds,
+                      breakSeconds: breakSeconds,
+                      dayCount: days.length,
+                      streak: _streak(),
+                      completedSets: completedSets,
+                    ),
+                    _DetailView(sessions: sortedSessions),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SummaryView extends StatelessWidget {
+  final int totalSeconds;
+  final int breakSeconds;
+  final int dayCount;
+  final int streak;
+  final List<DateTime> completedSets;
+
+  const _SummaryView({
+    required this.totalSeconds,
+    required this.breakSeconds,
+    required this.dayCount,
+    required this.streak,
+    required this.completedSets,
+  });
+
+  String _formatDuration(int totalSeconds) {
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  String _dateKey(DateTime date) => '${date.year}-${date.month}-${date.day}';
+
+  @override
+  Widget build(BuildContext context) {
+    final todayKey = _dateKey(DateTime.now());
+    final todaySets =
+        completedSets.where((date) => _dateKey(date) == todayKey).toList();
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(top: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Aktivite Özeti', style: TextStyle(fontSize: 13)),
+          const SizedBox(height: 8),
+          const Text('Tamamlanan odak oturumların burada görünür.',
+              style: TextStyle(fontSize: 9, color: Colors.grey)),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              _ReportStat(
+                  icon: 'saat.jpg',
+                  value: _formatDuration(totalSeconds),
+                  label: 'odak süresi'),
+              _ReportStat(
+                  icon: 'tarih.jpg',
+                  value: '$dayCount',
+                  label: 'gün çalışıldı'),
+              _ReportStat(
+                  icon: 'seri.jpg', value: '$streak', label: 'günlük seri'),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            todaySets.isEmpty
+                ? 'Bugün tamamlanan set yok'
+                : 'Bugünün son seti: #${todaySets.length}',
+            style: const TextStyle(fontSize: 10, color: Color(0xFFE56B77)),
+          ),
+          const SizedBox(height: 28),
+          const Text('Odak Süresi', style: TextStyle(fontSize: 13)),
+          const Divider(height: 24),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFE9EB),
+              border: Border.all(color: const Color(0xFFE7E7E7)),
+            ),
+            child: Center(
+              child: Text(
+                _formatDuration(totalSeconds),
+                style: const TextStyle(fontSize: 18, color: Color(0xFFE56B77)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 28),
+          const Text('Mola Süresi', style: TextStyle(fontSize: 13)),
+          const Divider(height: 24),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFE9EB),
+              border: Border.all(color: const Color(0xFFE7E7E7)),
+            ),
+            child: Center(
+              child: Text(
+                _formatDuration(breakSeconds),
+                style: const TextStyle(fontSize: 18, color: Color(0xFFE56B77)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReportStat extends StatelessWidget {
+  final String icon;
+  final String value;
+  final String label;
+
+  const _ReportStat(
+      {required this.icon, required this.value, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        color: const Color(0xFFFFE9EB),
+        child: Column(
+          children: [
+            Image.asset('assets/asset-sheet_slices/$icon',
+                width: 25, height: 25),
+            const SizedBox(height: 5),
+            Text(value,
+                style: const TextStyle(fontSize: 14, color: Color(0xFFE56B77))),
+            Text(label,
+                style: const TextStyle(fontSize: 8, color: Color(0xFFE56B77))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailView extends StatelessWidget {
+  final List<_FocusSession> sessions;
+
+  const _DetailView({required this.sessions});
+
+  String _formatDetailDuration(int totalSeconds) {
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (sessions.isEmpty) {
+      return const Center(
+        child:
+            Text('Henüz tamamlanan oturum yok', style: TextStyle(fontSize: 10)),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.only(top: 16),
+      itemCount: sessions.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final session = sessions[index];
+        final date =
+            '${session.completedAt.day.toString().padLeft(2, '0')}.${session.completedAt.month.toString().padLeft(2, '0')}.${session.completedAt.year}';
+        final time =
+            '${session.completedAt.hour.toString().padLeft(2, '0')}:${session.completedAt.minute.toString().padLeft(2, '0')}';
+        final icon = session.isBreak ? 'mola.jpg' : 'pomodoro-start.jpg';
+        final type = session.isBreak ? 'Mola' : 'Odak';
+        return ListTile(
+          dense: true,
+          leading: Image.asset('assets/asset-sheet_slices/$icon',
+              width: 25, height: 25),
+          title: Text('$date  $type', style: const TextStyle(fontSize: 10)),
+          subtitle: Text(time,
+              style: const TextStyle(fontSize: 8, color: Colors.grey)),
+          trailing: Text(_formatDetailDuration(session.durationSeconds),
+              style: const TextStyle(fontSize: 10)),
+        );
+      },
+    );
+  }
+}
+
 class _PixelButton extends StatelessWidget {
-  final String text;
+  final String? text;
   final VoidCallback onPressed;
   final Color color;
   final String? asset;
+  final String? semanticsLabel;
 
   const _PixelButton({
     required this.text,
     required this.onPressed,
     required this.color,
     this.asset,
+    this.semanticsLabel,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onPressed,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.black, width: 3),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black,
-              offset: Offset(4, 4),
-            )
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (asset != null)
-              Image.asset(asset!, width: 26, height: 26, fit: BoxFit.contain),
-            if (asset != null) const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                text,
-                style: const TextStyle(color: Colors.white, fontSize: 12),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-          ],
+    return Semantics(
+      label: semanticsLabel ?? text ?? 'Buton',
+      button: true,
+      child: GestureDetector(
+        onTap: onPressed,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.black, width: 3),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black,
+                offset: Offset(4, 4),
+              )
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (asset != null)
+                Image.asset(asset!, width: 26, height: 26, fit: BoxFit.contain),
+              if (asset != null && text != null) const SizedBox(width: 6),
+              if (text != null)
+                Flexible(
+                  child: Text(
+                    text!,
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -577,19 +1145,32 @@ class _AssetButton extends StatelessWidget {
   final String asset;
   final VoidCallback onTap;
   final String? label;
+  final String? semanticsLabel;
+  final double size;
 
-  const _AssetButton({required this.asset, required this.onTap, this.label});
+  const _AssetButton({
+    required this.asset,
+    required this.onTap,
+    this.label,
+    this.semanticsLabel,
+    this.size = 42,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset(asset, width: 42, height: 42, fit: BoxFit.contain),
-          if (label != null) Text(label!, style: const TextStyle(fontSize: 10)),
-        ],
+    return Semantics(
+      label: semanticsLabel ?? label ?? 'Buton',
+      button: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(asset, width: size, height: size, fit: BoxFit.contain),
+            if (label != null)
+              Text(label!, style: const TextStyle(fontSize: 10)),
+          ],
+        ),
       ),
     );
   }
