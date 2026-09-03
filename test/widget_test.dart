@@ -6,6 +6,7 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:pomodoro_app/main.dart';
 
@@ -34,5 +35,23 @@ void main() {
     expect(find.text('RAPOR'), findsOneWidget);
     expect(find.text('Özet'), findsOneWidget);
     expect(find.text('Detay'), findsOneWidget);
+  });
+
+  testWidgets('Report recovers completed sets from local storage',
+      (WidgetTester tester) async {
+    final today = DateTime.now().toIso8601String();
+    SharedPreferences.setMockInitialValues({
+      'activity_dates': [today],
+      'completed_sets': [today, today],
+      'focus_sessions': <String>[],
+    });
+
+    await tester.pumpWidget(const PixelPomodoroApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('Rapor'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('00:50:00'), findsOneWidget);
+    expect(find.text('Bugünün setleri: #1 #2'), findsOneWidget);
   });
 }

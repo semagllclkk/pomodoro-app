@@ -102,7 +102,14 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     if (!mounted) return;
     setState(() {
       focusSessions = savedSessions
-          .map((value) => _FocusSession.fromJson(jsonDecode(value)))
+          .map((value) {
+            try {
+              return _FocusSession.fromJson(jsonDecode(value));
+            } catch (_) {
+              return null;
+            }
+          })
+          .whereType<_FocusSession>()
           .toList();
       activityDates = savedActivityDates.isNotEmpty
           ? savedActivityDates.map(DateTime.parse).toList()
@@ -143,7 +150,10 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       completedAt: DateTime.now(),
       durationMinutes: configuredWorkMinutes,
     );
-    final updatedSessions = [...focusSessions, session];
+    final updatedSessions = [
+      ...focusSessions,
+      session,
+    ];
     setState(() => focusSessions = updatedSessions);
     final preferences = await SharedPreferences.getInstance();
     await preferences.setStringList(
@@ -743,10 +753,18 @@ class _ReportDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final totalMinutes = sessions.fold<int>(
+    final reportSessions = sessions.isNotEmpty
+        ? sessions
+        : completedSets
+            .map((date) => _FocusSession(
+                  completedAt: date,
+                  durationMinutes: 25,
+                ))
+            .toList();
+    final totalMinutes = reportSessions.fold<int>(
         0, (total, session) => total + session.durationMinutes);
     final days = activityDates.map(_dateKey).toSet();
-    final sortedSessions = [...sessions]
+    final sortedSessions = [...reportSessions]
       ..sort((a, b) => b.completedAt.compareTo(a.completedAt));
 
     return DefaultTabController(
