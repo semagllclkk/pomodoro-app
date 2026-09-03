@@ -397,7 +397,14 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFFFFBCC3),
-        title: const Text('ÇIKIŞ', style: TextStyle(fontSize: 14)),
+        title: Row(
+          children: [
+            Image.asset('assets/asset-sheet_slices/pomodoro-end.jpg',
+                width: 32, height: 32),
+            const SizedBox(width: 8),
+            const Text('ÇIKIŞ', style: TextStyle(fontSize: 14)),
+          ],
+        ),
         content: const Text(
           'Uygulamadan çıkmak istediğine emin misin?',
           style: TextStyle(fontSize: 10),
@@ -460,158 +467,179 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   Widget build(BuildContext context) {
     final label = blinkLabel;
     return Scaffold(
-      body: CustomPaint(
-        painter: _CrystalPainter(),
-        child: Center(
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 600),
-            padding: const EdgeInsets.all(24.0),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Hero(
-                    tag: 'app-hero',
-                    child: Image.asset(
-                      currentAsset,
-                      width: 240,
-                      height: 240,
-                      fit: BoxFit.contain,
-                      errorBuilder: (c, e, s) => const SizedBox.shrink(),
+      body: SafeArea(
+        child: CustomPaint(
+          painter: _CrystalPainter(),
+          child: Stack(
+            children: [
+              Positioned(
+                top: 8,
+                right: 16,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _AssetButton(
+                      asset: 'assets/asset-sheet_slices/istatistik.jpg',
+                      onTap: openReport,
+                      semanticsLabel: 'Rapor',
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  // Blink label OR normal status text
-                  if (label != null)
-                    AnimatedOpacity(
-                      opacity: _blinkVisible ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 100),
-                      child: Text(
-                        label,
-                        style:
-                            const TextStyle(fontSize: 16, color: Colors.white),
-                        textAlign: TextAlign.center,
-                      ),
-                    )
-                  else
-                    Text(
-                      statusText,
-                      style: const TextStyle(fontSize: 24, color: Colors.white),
-                      textAlign: TextAlign.center,
+                    const SizedBox(width: 8),
+                    _AssetButton(
+                      asset: 'assets/asset-sheet_slices/settings.jpg',
+                      onTap: openSettings,
+                      semanticsLabel: 'Ayarlar',
                     ),
-                  const SizedBox(height: 30),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 20, horizontal: 20),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFC0CB),
-                      borderRadius: BorderRadius.circular(20),
-                      border:
-                          Border.all(color: const Color(0xFFFF69B4), width: 4),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0xFFFF69B4),
-                          offset: Offset(4, 4),
-                        )
-                      ],
-                    ),
-                    child: Row(
+                  ],
+                ),
+              ),
+              Center(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  padding: const EdgeInsets.all(24.0),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Image.asset('assets/asset-sheet_slices/saat.jpg',
-                            width: 34, height: 34),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              timerText,
-                              style: const TextStyle(
-                                  fontSize: 48,
-                                  color: Colors.white,
-                                  letterSpacing: 4),
-                            ),
+                        Hero(
+                          tag: 'app-hero',
+                          child: Image.asset(
+                            currentAsset,
+                            width: 240,
+                            height: 240,
+                            fit: BoxFit.contain,
+                            errorBuilder: (c, e, s) => const SizedBox.shrink(),
                           ),
                         ),
+                        const SizedBox(height: 20),
+                        // Blink label OR normal status text
+                        if (label != null)
+                          AnimatedOpacity(
+                            opacity: _blinkVisible ? 1.0 : 0.0,
+                            duration: const Duration(milliseconds: 100),
+                            child: Text(
+                              label,
+                              style: const TextStyle(
+                                  fontSize: 16, color: Colors.white),
+                              textAlign: TextAlign.center,
+                            ),
+                          )
+                        else
+                          Text(
+                            statusText,
+                            style: const TextStyle(
+                                fontSize: 24, color: Colors.white),
+                            textAlign: TextAlign.center,
+                          ),
+                        const SizedBox(height: 30),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 20, horizontal: 20),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFC0CB),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                                color: const Color(0xFFFF69B4), width: 4),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0xFFFF69B4),
+                                offset: Offset(4, 4),
+                              )
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Image.asset('assets/asset-sheet_slices/saat.jpg',
+                                  width: 34, height: 34),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    timerText,
+                                    style: const TextStyle(
+                                        fontSize: 48,
+                                        color: Colors.white,
+                                        letterSpacing: 4),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _PixelButton(
+                                text: isRunning ? 'DURDUR' : 'BAŞLA',
+                                onPressed: isRunning ? stopTimer : startTimer,
+                                color: const Color(0xFFFF69B4),
+                                asset:
+                                    'assets/asset-sheet_slices/pomodoro-start.jpg',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _PixelButton(
+                                text: null,
+                                semanticsLabel: 'Atla',
+                                onPressed: skipPhase,
+                                color: const Color(0xFFB98AD9),
+                                asset: 'assets/asset-sheet_slices/atla.jpg',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _PixelButton(
+                                text: null,
+                                semanticsLabel: 'İleri sar',
+                                onPressed: fastForward,
+                                color: const Color(0xFF8EBCD1),
+                                asset:
+                                    'assets/asset-sheet_slices/ileri-sar.jpg',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _PixelButton(
+                                text: 'SIFIRLA',
+                                onPressed: resetTimer,
+                                color: const Color(0xFFFF6B6B),
+                                asset:
+                                    'assets/asset-sheet_slices/pomodoro-end.jpg',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          child: _PixelButton(
+                            text: 'MOLA TEST',
+                            onPressed: () {
+                              stopTimer();
+                              setState(() {
+                                currentState = 'onBreak';
+                                timeLeft = configuredBreakMinutes * 60;
+                              });
+                            },
+                            color: const Color(0xFF87CEEB),
+                            asset: 'assets/asset-sheet_slices/mola.jpg',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _PixelButton(
-                          text: isRunning ? 'DURDUR' : 'BAŞLA',
-                          onPressed: isRunning ? stopTimer : startTimer,
-                          color: const Color(0xFFFF69B4),
-                          asset: 'assets/asset-sheet_slices/pomodoro-start.jpg',
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _PixelButton(
-                          text: 'ATLA',
-                          onPressed: skipPhase,
-                          color: const Color(0xFFB98AD9),
-                          asset: 'assets/asset-sheet_slices/atla.jpg',
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _PixelButton(
-                          text: 'İLERİ SAR',
-                          onPressed: fastForward,
-                          color: const Color(0xFF8EBCD1),
-                          asset: 'assets/asset-sheet_slices/ileri-sar.jpg',
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _PixelButton(
-                          text: 'SIFIRLA',
-                          onPressed: resetTimer,
-                          color: const Color(0xFFFF6B6B),
-                          asset: 'assets/asset-sheet_slices/pomodoro-end.jpg',
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: _PixelButton(
-                      text: 'MOLA TEST',
-                      onPressed: () {
-                        stopTimer();
-                        setState(() {
-                          currentState = 'onBreak';
-                          timeLeft = configuredBreakMinutes * 60;
-                        });
-                      },
-                      color: const Color(0xFF87CEEB),
-                      asset: 'assets/asset-sheet_slices/mola.jpg',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _AssetButton(
-                    asset: 'assets/asset-sheet_slices/istatistik.jpg',
-                    onTap: openReport,
-                    semanticsLabel: 'Rapor',
-                  ),
-                  const SizedBox(height: 4),
-                  _AssetButton(
-                    asset: 'assets/asset-sheet_slices/settings.jpg',
-                    label: 'AYARLAR',
-                    onTap: openSettings,
-                  ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -630,15 +658,18 @@ class _FocusSession {
 
   factory _FocusSession.fromJson(dynamic json) {
     final data = json as Map<String, dynamic>;
+    final durationSeconds = data['durationSeconds'];
     return _FocusSession(
       completedAt: DateTime.parse(data['completedAt'] as String),
-      durationMinutes: data['durationMinutes'] as int,
+      durationMinutes: durationSeconds is int
+          ? durationSeconds ~/ 60
+          : data['durationMinutes'] as int,
     );
   }
 
   Map<String, dynamic> toJson() => {
         'completedAt': completedAt.toIso8601String(),
-        'durationMinutes': durationMinutes,
+        'durationSeconds': durationMinutes * 60,
       };
 }
 
@@ -736,10 +767,16 @@ class _SummaryView extends StatelessWidget {
     required this.streak,
   });
 
+  String _formatDuration(int totalMinutes) {
+    final totalSeconds = totalMinutes * 60;
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final hours = totalMinutes ~/ 60;
-    final minutes = totalMinutes % 60;
     return SingleChildScrollView(
       padding: const EdgeInsets.only(top: 20),
       child: Column(
@@ -754,7 +791,7 @@ class _SummaryView extends StatelessWidget {
             children: [
               _ReportStat(
                   icon: 'saat.jpg',
-                  value: '$hours:$minutes',
+                  value: _formatDuration(totalMinutes),
                   label: 'odak süresi'),
               _ReportStat(
                   icon: 'tarih.jpg',
@@ -776,7 +813,7 @@ class _SummaryView extends StatelessWidget {
               child: Text(
                 totalMinutes == 0
                     ? 'Henüz tamamlanan oturum yok'
-                    : 'Toplam $totalMinutes dakika odaklandın',
+                    : 'Toplam ${_formatDuration(totalMinutes)} odaklandın',
                 style: const TextStyle(fontSize: 10, color: Colors.grey),
               ),
             ),
@@ -857,51 +894,58 @@ class _DetailView extends StatelessWidget {
 }
 
 class _PixelButton extends StatelessWidget {
-  final String text;
+  final String? text;
   final VoidCallback onPressed;
   final Color color;
   final String? asset;
+  final String? semanticsLabel;
 
   const _PixelButton({
     required this.text,
     required this.onPressed,
     required this.color,
     this.asset,
+    this.semanticsLabel,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onPressed,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.black, width: 3),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black,
-              offset: Offset(4, 4),
-            )
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (asset != null)
-              Image.asset(asset!, width: 26, height: 26, fit: BoxFit.contain),
-            if (asset != null) const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                text,
-                style: const TextStyle(color: Colors.white, fontSize: 12),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-          ],
+    return Semantics(
+      label: semanticsLabel ?? text ?? 'Buton',
+      button: true,
+      child: GestureDetector(
+        onTap: onPressed,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.black, width: 3),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black,
+                offset: Offset(4, 4),
+              )
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (asset != null)
+                Image.asset(asset!, width: 26, height: 26, fit: BoxFit.contain),
+              if (asset != null && text != null) const SizedBox(width: 6),
+              if (text != null)
+                Flexible(
+                  child: Text(
+                    text!,
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

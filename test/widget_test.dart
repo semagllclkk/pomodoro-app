@@ -14,8 +14,13 @@ void main() {
     await tester.pumpWidget(const PixelPomodoroApp());
     expect(find.text('BAŞLAMAYA HAZIR'), findsOneWidget);
     expect(find.text('25:00'), findsOneWidget);
-    expect(find.text('ATLA'), findsOneWidget);
-    expect(find.text('İLERİ SAR'), findsOneWidget);
+    expect(find.bySemanticsLabel('Atla'), findsOneWidget);
+    expect(find.bySemanticsLabel('İleri sar'), findsOneWidget);
+    expect(find.bySemanticsLabel('Rapor'), findsOneWidget);
+    expect(find.bySemanticsLabel('Ayarlar'), findsOneWidget);
+    expect(find.text('ATLA'), findsNothing);
+    expect(find.text('İLERİ SAR'), findsNothing);
+    expect(find.text('AYARLAR'), findsNothing);
     expect(find.text('SIFIRLA'), findsOneWidget);
   });
 
