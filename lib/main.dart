@@ -48,6 +48,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   List<_FocusSession> focusSessions = [];
   List<DateTime> activityDates = [];
   List<DateTime> completedSets = [];
+  bool _workPhaseRecorded = false;
 
   // Blink state
   bool _blinkVisible = true;
@@ -146,6 +147,8 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   }
 
   Future<void> _recordFocusSession() async {
+    if (_workPhaseRecorded) return;
+    _workPhaseRecorded = true;
     final session = _FocusSession(
       completedAt: DateTime.now(),
       durationMinutes: configuredWorkMinutes,
@@ -160,6 +163,35 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       'focus_sessions',
       updatedSessions.map((item) => jsonEncode(item.toJson())).toList(),
     );
+  }
+
+  void _completeWorkPhase() {
+    _playAlert();
+    _startBlink();
+    _recordFocusSession();
+    _stopLoopMusic();
+    setState(() {
+      currentState = 'onBreak';
+      timeLeft = configuredBreakMinutes * 60;
+    });
+  }
+
+  void _completeBreakPhase() {
+    _playAlert();
+    _stopBlink();
+    timer?.cancel();
+    setState(() {
+      isRunning = false;
+      currentState = 'idle';
+      timeLeft = configuredWorkMinutes * 60;
+      _workPhaseRecorded = false;
+    });
+    _recordCompletedSet();
+    _startLoopMusic();
+    _startBlink();
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) _stopBlink();
+    });
   }
 
   Future<void> _startLoopMusic() async {
@@ -240,6 +272,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       if (startingWork) {
         currentState = 'working';
         timeLeft = configuredWorkMinutes * 60;
+        _workPhaseRecorded = false;
       }
     });
     if (startingWork) _recordActivityDate();
@@ -257,30 +290,9 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       } else {
         // Timer ended: switch between work and break
         if (currentState == 'working') {
-          _playAlert();
-          _startBlink();
-          _recordFocusSession();
-          _stopLoopMusic();
-          setState(() {
-            currentState = 'onBreak';
-            timeLeft = configuredBreakMinutes * 60;
-          });
+          _completeWorkPhase();
         } else if (currentState == 'onBreak') {
-          _playAlert();
-          _stopBlink();
-          t.cancel();
-          setState(() {
-            isRunning = false;
-            currentState = 'idle';
-            timeLeft = configuredWorkMinutes * 60;
-          });
-          _recordCompletedSet();
-          _startLoopMusic();
-          // Show "focus time" blink briefly
-          _startBlink();
-          Future.delayed(const Duration(seconds: 4), () {
-            if (mounted) _stopBlink();
-          });
+          _completeBreakPhase();
         }
       }
     });
@@ -312,21 +324,14 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     timer?.cancel();
     _stopBlink();
     _stopLoopMusic();
-    setState(() {
-      if (currentState == 'working') {
-        currentState = 'onBreak';
-        timeLeft = configuredBreakMinutes * 60;
-        isRunning = true;
-      } else {
-        currentState = 'idle';
-        timeLeft = configuredWorkMinutes * 60;
-        isRunning = false;
-      }
-    });
+    if (currentState == 'working') {
+      _completeWorkPhase();
+      isRunning = true;
+    } else {
+      _completeBreakPhase();
+    }
     if (isRunning) {
       startTimer();
-    } else {
-      _startLoopMusic();
     }
   }
 
@@ -425,15 +430,6 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                 onTap: () async {
                   await _toggleMusic(setDialogState);
                 },
-              ),
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Image.asset('assets/asset-sheet_slices/onay.png',
-                      width: 32, height: 32),
-                  const SizedBox(width: 8),
-                ],
               ),
               const SizedBox(height: 10),
               _AssetButton(

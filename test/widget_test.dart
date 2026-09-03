@@ -54,4 +54,26 @@ void main() {
     expect(find.text('00:50:00'), findsOneWidget);
     expect(find.text('Bugünün setleri: #1 #2'), findsOneWidget);
   });
+
+  testWidgets('Skipping work and break records a session and set',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const PixelPomodoroApp());
+
+    await tester.tap(find.text('BAŞLA'));
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('Atla'));
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('Atla'));
+    await tester.pump();
+    await tester.tap(find.bySemanticsLabel('Rapor'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('00:25:00'), findsOneWidget);
+    expect(find.text('Bugünün setleri: #1'), findsOneWidget);
+    await tester.tap(find.text('Detay'));
+    await tester.pumpAndSettle();
+    expect(find.text('25 dk'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+  });
 }
