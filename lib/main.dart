@@ -49,6 +49,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   List<DateTime> activityDates = [];
   List<DateTime> completedSets = [];
   bool _workPhaseRecorded = false;
+  int activeWorkSeconds = 0;
 
   // Blink state
   bool _blinkVisible = true;
@@ -100,6 +101,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     final savedActivityDates =
         preferences.getStringList('activity_dates') ?? [];
     final savedSets = preferences.getStringList('completed_sets') ?? [];
+    final savedActiveSeconds = preferences.getInt('active_work_seconds') ?? 0;
     if (!mounted) return;
     setState(() {
       focusSessions = savedSessions
@@ -119,6 +121,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
               .toSet()
               .toList();
       completedSets = savedSets.map(DateTime.parse).toList();
+      activeWorkSeconds = savedActiveSeconds;
     });
   }
 
@@ -151,7 +154,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     _workPhaseRecorded = true;
     final session = _FocusSession(
       completedAt: DateTime.now(),
-      durationMinutes: configuredWorkMinutes,
+      durationSeconds: activeWorkSeconds,
     );
     final updatedSessions = [
       ...focusSessions,
@@ -163,6 +166,13 @@ class _PomodoroScreenState extends State<PomodoroScreen>
       'focus_sessions',
       updatedSessions.map((item) => jsonEncode(item.toJson())).toList(),
     );
+    activeWorkSeconds = 0;
+    await preferences.remove('active_work_seconds');
+  }
+
+  Future<void> _persistActiveWork() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setInt('active_work_seconds', activeWorkSeconds);
   }
 
   void _completeWorkPhase() {
@@ -278,6 +288,10 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     if (startingWork) _recordActivityDate();
     timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (timeLeft > 0) {
+        if (currentState == 'working') {
+          activeWorkSeconds++;
+          _persistActiveWork();
+        }
         setState(() => timeLeft--);
         // Last 30 seconds of break warning
         if (currentState == 'onBreak' && timeLeft == 30) {
@@ -310,6 +324,9 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     _playClick();
     _stopBlink();
     timer?.cancel();
+    activeWorkSeconds = 0;
+    SharedPreferences.getInstance()
+        .then((preferences) => preferences.remove('active_work_seconds'));
     setState(() {
       isRunning = false;
       currentState = 'idle';
@@ -325,6 +342,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     _stopBlink();
     _stopLoopMusic();
     if (currentState == 'working') {
+      activeWorkSeconds += timeLeft;
       _completeWorkPhase();
       isRunning = true;
     } else {
@@ -455,6 +473,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
         sessions: focusSessions,
         activityDates: activityDates,
         completedSets: completedSets,
+        activeWorkSeconds: activeWorkSeconds,
       ),
     );
   }
@@ -699,27 +718,29 @@ class _PomodoroScreenState extends State<PomodoroScreen>
 
 class _FocusSession {
   final DateTime completedAt;
-  final int durationMinutes;
+  final int durationSeconds;
 
   const _FocusSession({
     required this.completedAt,
-    required this.durationMinutes,
+    required this.durationSeconds,
   });
+
+  int get durationMinutes => durationSeconds ~/ 60;
 
   factory _FocusSession.fromJson(dynamic json) {
     final data = json as Map<String, dynamic>;
     final durationSeconds = data['durationSeconds'];
     return _FocusSession(
       completedAt: DateTime.parse(data['completedAt'] as String),
-      durationMinutes: durationSeconds is int
-          ? durationSeconds ~/ 60
-          : data['durationMinutes'] as int,
+      durationSeconds: durationSeconds is int
+          ? durationSeconds
+          : (data['durationMinutes'] as int) * 60,
     );
   }
 
   Map<String, dynamic> toJson() => {
         'completedAt': completedAt.toIso8601String(),
-        'durationSeconds': durationMinutes * 60,
+        'durationSeconds': durationSeconds,
       };
 }
 
@@ -727,11 +748,13 @@ class _ReportDialog extends StatelessWidget {
   final List<_FocusSession> sessions;
   final List<DateTime> activityDates;
   final List<DateTime> completedSets;
+  final int activeWorkSeconds;
 
   const _ReportDialog({
     required this.sessions,
     required this.activityDates,
     required this.completedSets,
+    required this.activeWorkSeconds,
   });
 
   String _dateKey(DateTime date) => '${date.year}-${date.month}-${date.day}';
@@ -749,16 +772,21 @@ class _ReportDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reportSessions = sessions.isNotEmpty
-        ? sessions
-        : completedSets
-            .map((date) => _FocusSession(
-                  completedAt: date,
-                  durationMinutes: 25,
-                ))
-            .toList();
-    final totalMinutes = reportSessions.fold<int>(
-        0, (total, session) => total + session.durationMinutes);
+    final reportSessions = [...sessions];
+    if (reportSessions.isEmpty) {
+      reportSessions.addAll(completedSets.map((date) => _FocusSession(
+            completedAt: date,
+            durationSeconds: 25 * 60,
+          )));
+    }
+    if (activeWorkSeconds > 0) {
+      reportSessions.add(_FocusSession(
+        completedAt: DateTime.now(),
+        durationSeconds: activeWorkSeconds,
+      ));
+    }
+    final totalSeconds = reportSessions.fold<int>(
+        0, (total, session) => total + session.durationSeconds);
     final days = activityDates.map(_dateKey).toSet();
     final sortedSessions = [...reportSessions]
       ..sort((a, b) => b.completedAt.compareTo(a.completedAt));
@@ -804,7 +832,7 @@ class _ReportDialog extends StatelessWidget {
                 child: TabBarView(
                   children: [
                     _SummaryView(
-                      totalMinutes: totalMinutes,
+                      totalSeconds: totalSeconds,
                       dayCount: days.length,
                       streak: _streak(),
                       completedSets: completedSets,
@@ -822,20 +850,19 @@ class _ReportDialog extends StatelessWidget {
 }
 
 class _SummaryView extends StatelessWidget {
-  final int totalMinutes;
+  final int totalSeconds;
   final int dayCount;
   final int streak;
   final List<DateTime> completedSets;
 
   const _SummaryView({
-    required this.totalMinutes,
+    required this.totalSeconds,
     required this.dayCount,
     required this.streak,
     required this.completedSets,
   });
 
-  String _formatDuration(int totalMinutes) {
-    final totalSeconds = totalMinutes * 60;
+  String _formatDuration(int totalSeconds) {
     final hours = totalSeconds ~/ 3600;
     final minutes = (totalSeconds % 3600) ~/ 60;
     final seconds = totalSeconds % 60;
@@ -863,7 +890,7 @@ class _SummaryView extends StatelessWidget {
             children: [
               _ReportStat(
                   icon: 'saat.jpg',
-                  value: _formatDuration(totalMinutes),
+                  value: _formatDuration(totalSeconds),
                   label: 'odak süresi'),
               _ReportStat(
                   icon: 'tarih.jpg',
@@ -890,9 +917,9 @@ class _SummaryView extends StatelessWidget {
             ),
             child: Center(
               child: Text(
-                totalMinutes == 0
+                totalSeconds == 0
                     ? 'Henüz tamamlanan oturum yok'
-                    : 'Toplam ${_formatDuration(totalMinutes)} odaklandın',
+                    : 'Toplam ${_formatDuration(totalSeconds)} odaklandın',
                 style: const TextStyle(fontSize: 10, color: Colors.grey),
               ),
             ),
@@ -939,6 +966,13 @@ class _DetailView extends StatelessWidget {
 
   const _DetailView({required this.sessions});
 
+  String _formatDetailDuration(int totalSeconds) {
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     if (sessions.isEmpty) {
@@ -964,7 +998,7 @@ class _DetailView extends StatelessWidget {
           title: Text(date, style: const TextStyle(fontSize: 10)),
           subtitle: Text(time,
               style: const TextStyle(fontSize: 8, color: Colors.grey)),
-          trailing: Text('${session.durationMinutes} dk',
+          trailing: Text(_formatDetailDuration(session.durationSeconds),
               style: const TextStyle(fontSize: 10)),
         );
       },

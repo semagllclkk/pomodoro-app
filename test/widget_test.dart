@@ -73,7 +73,21 @@ void main() {
     expect(find.text('Bugünün setleri: #1'), findsOneWidget);
     await tester.tap(find.text('Detay'));
     await tester.pumpAndSettle();
-    expect(find.text('25 dk'), findsOneWidget);
+    expect(find.text('00:25:00'), findsOneWidget);
     await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('Report keeps an unfinished session duration',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({'active_work_seconds': 458});
+    await tester.pumpWidget(const PixelPomodoroApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('Rapor'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('00:07:38'), findsOneWidget);
+    await tester.tap(find.text('Detay'));
+    await tester.pumpAndSettle();
+    expect(find.text('00:07:38'), findsOneWidget);
   });
 }
