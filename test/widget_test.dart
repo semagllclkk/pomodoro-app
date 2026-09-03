@@ -15,4 +15,16 @@ void main() {
     expect(find.text('BAŞLAMAYA HAZIR'), findsOneWidget);
     expect(find.text('25:00'), findsOneWidget);
   });
+
+  testWidgets('Report opens with summary and detail tabs',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(const PixelPomodoroApp());
+    await tester.ensureVisible(find.bySemanticsLabel('Rapor'));
+    await tester.tap(find.bySemanticsLabel('Rapor'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('RAPOR'), findsOneWidget);
+    expect(find.text('Özet'), findsOneWidget);
+    expect(find.text('Detay'), findsOneWidget);
+  });
 }

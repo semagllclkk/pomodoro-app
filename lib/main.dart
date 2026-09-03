@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() => runApp(const PixelPomodoroApp());
 
@@ -43,6 +45,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
   bool musicEnabled = true;
   String currentState = 'idle'; // 'idle', 'working', 'onBreak'
   Timer? timer;
+  List<_FocusSession> focusSessions = [];
 
   // Blink state
   bool _blinkVisible = true;
@@ -72,16 +75,44 @@ class _PomodoroScreenState extends State<PomodoroScreen>
 
   // Blink label shown during timer transitions or warnings
   String? get blinkLabel {
-    if (currentState == 'working' && timeLeft == 0) return 'BİRAZ DİNLENME VAKTİ!';
+    if (currentState == 'working' && timeLeft == 0)
+      return 'BİRAZ DİNLENME VAKTİ!';
     if (currentState == 'onBreak' && timeLeft == 0) return 'ODAKLANMA VAKTİ!';
-    if (currentState == 'onBreak' && timeLeft <= 30 && timeLeft > 0) return 'MOLA BİTİYOR!';
+    if (currentState == 'onBreak' && timeLeft <= 30 && timeLeft > 0)
+      return 'MOLA BİTİYOR!';
     return null;
   }
 
   @override
   void initState() {
     super.initState();
+    _loadFocusSessions();
     _startLoopMusic();
+  }
+
+  Future<void> _loadFocusSessions() async {
+    final preferences = await SharedPreferences.getInstance();
+    final savedSessions = preferences.getStringList('focus_sessions') ?? [];
+    if (!mounted) return;
+    setState(() {
+      focusSessions = savedSessions
+          .map((value) => _FocusSession.fromJson(jsonDecode(value)))
+          .toList();
+    });
+  }
+
+  Future<void> _recordFocusSession() async {
+    final session = _FocusSession(
+      completedAt: DateTime.now(),
+      durationMinutes: configuredWorkMinutes,
+    );
+    final updatedSessions = [...focusSessions, session];
+    setState(() => focusSessions = updatedSessions);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setStringList(
+      'focus_sessions',
+      updatedSessions.map((item) => jsonEncode(item.toJson())).toList(),
+    );
   }
 
   Future<void> _startLoopMusic() async {
@@ -169,6 +200,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
         if (currentState == 'working') {
           _playAlert();
           _startBlink();
+          _recordFocusSession();
           setState(() {
             currentState = 'onBreak';
             timeLeft = configuredBreakMinutes * 60;
@@ -321,6 +353,14 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     );
   }
 
+  void openReport() {
+    _playClick();
+    showDialog<void>(
+      context: context,
+      builder: (context) => _ReportDialog(sessions: focusSessions),
+    );
+  }
+
   void _showExitConfirmation() {
     showDialog<void>(
       context: context,
@@ -417,16 +457,15 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                       duration: const Duration(milliseconds: 100),
                       child: Text(
                         label,
-                        style: const TextStyle(
-                            fontSize: 16, color: Colors.white),
+                        style:
+                            const TextStyle(fontSize: 16, color: Colors.white),
                         textAlign: TextAlign.center,
                       ),
                     )
                   else
                     Text(
                       statusText,
-                      style: const TextStyle(
-                          fontSize: 24, color: Colors.white),
+                      style: const TextStyle(fontSize: 24, color: Colors.white),
                       textAlign: TextAlign.center,
                     ),
                   const SizedBox(height: 30),
@@ -448,7 +487,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                     ),
                     child: Row(
                       children: [
-                        Image.asset('assets/asset-sheet_slices/time.jpg',
+                        Image.asset('assets/asset-sheet_slices/saat.jpg',
                             width: 34, height: 34),
                         const SizedBox(width: 8),
                         Flexible(
@@ -507,6 +546,11 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                   ),
                   const SizedBox(height: 12),
                   _AssetButton(
+                    asset: 'assets/asset-sheet_slices/istatistik.jpg',
+                    onTap: openReport,
+                  ),
+                  const SizedBox(height: 4),
+                  _AssetButton(
                     asset: 'assets/asset-sheet_slices/settings.jpg',
                     label: 'AYARLAR',
                     onTap: openSettings,
@@ -517,6 +561,244 @@ class _PomodoroScreenState extends State<PomodoroScreen>
           ),
         ),
       ),
+    );
+  }
+}
+
+class _FocusSession {
+  final DateTime completedAt;
+  final int durationMinutes;
+
+  const _FocusSession({
+    required this.completedAt,
+    required this.durationMinutes,
+  });
+
+  factory _FocusSession.fromJson(dynamic json) {
+    final data = json as Map<String, dynamic>;
+    return _FocusSession(
+      completedAt: DateTime.parse(data['completedAt'] as String),
+      durationMinutes: data['durationMinutes'] as int,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'completedAt': completedAt.toIso8601String(),
+        'durationMinutes': durationMinutes,
+      };
+}
+
+class _ReportDialog extends StatelessWidget {
+  final List<_FocusSession> sessions;
+
+  const _ReportDialog({required this.sessions});
+
+  String _dateKey(DateTime date) => '${date.year}-${date.month}-${date.day}';
+
+  int _streak() {
+    final days =
+        sessions.map((session) => _dateKey(session.completedAt)).toSet();
+    var day = DateTime.now();
+    var count = 0;
+    while (days.contains(_dateKey(day))) {
+      count++;
+      day = day.subtract(const Duration(days: 1));
+    }
+    return count;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalMinutes = sessions.fold<int>(
+        0, (total, session) => total + session.durationMinutes);
+    final days =
+        sessions.map((session) => _dateKey(session.completedAt)).toSet();
+    final sortedSessions = [...sessions]
+      ..sort((a, b) => b.completedAt.compareTo(a.completedAt));
+
+    return DefaultTabController(
+      length: 2,
+      child: AlertDialog(
+        backgroundColor: Colors.white,
+        titlePadding: const EdgeInsets.fromLTRB(18, 12, 10, 0),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('RAPOR', style: TextStyle(fontSize: 16)),
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: () => Navigator.pop(context),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 500,
+          height: 440,
+          child: Column(
+            children: [
+              const TabBar(
+                labelColor: Color(0xFFE56B77),
+                unselectedLabelColor: Colors.grey,
+                tabs: [
+                  Tab(
+                      icon: ImageIcon(AssetImage(
+                          'assets/asset-sheet_slices/istatistik.jpg')),
+                      text: 'Özet'),
+                  Tab(
+                      icon: ImageIcon(
+                          AssetImage('assets/asset-sheet_slices/detail.jpg')),
+                      text: 'Detay'),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _SummaryView(
+                      totalMinutes: totalMinutes,
+                      dayCount: days.length,
+                      streak: _streak(),
+                    ),
+                    _DetailView(sessions: sortedSessions),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SummaryView extends StatelessWidget {
+  final int totalMinutes;
+  final int dayCount;
+  final int streak;
+
+  const _SummaryView({
+    required this.totalMinutes,
+    required this.dayCount,
+    required this.streak,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(top: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Aktivite Özeti', style: TextStyle(fontSize: 13)),
+          const SizedBox(height: 8),
+          const Text('Tamamlanan odak oturumların burada görünür.',
+              style: TextStyle(fontSize: 9, color: Colors.grey)),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              _ReportStat(
+                  icon: 'saat.jpg',
+                  value: '$hours:$minutes',
+                  label: 'odak süresi'),
+              _ReportStat(
+                  icon: 'tarih.jpg',
+                  value: '$dayCount',
+                  label: 'gün çalışıldı'),
+              _ReportStat(
+                  icon: 'seri.jpg', value: '$streak', label: 'günlük seri'),
+            ],
+          ),
+          const SizedBox(height: 28),
+          const Text('Odak Saatleri', style: TextStyle(fontSize: 13)),
+          const Divider(height: 24),
+          Container(
+            height: 150,
+            decoration: BoxDecoration(
+              border: Border.all(color: const Color(0xFFE7E7E7)),
+            ),
+            child: Center(
+              child: Text(
+                totalMinutes == 0
+                    ? 'Henüz tamamlanan oturum yok'
+                    : 'Toplam $totalMinutes dakika odaklandın',
+                style: const TextStyle(fontSize: 10, color: Colors.grey),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReportStat extends StatelessWidget {
+  final String icon;
+  final String value;
+  final String label;
+
+  const _ReportStat(
+      {required this.icon, required this.value, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        color: const Color(0xFFFFE9EB),
+        child: Column(
+          children: [
+            Image.asset('assets/asset-sheet_slices/$icon',
+                width: 25, height: 25),
+            const SizedBox(height: 5),
+            Text(value,
+                style: const TextStyle(fontSize: 14, color: Color(0xFFE56B77))),
+            Text(label,
+                style: const TextStyle(fontSize: 8, color: Color(0xFFE56B77))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailView extends StatelessWidget {
+  final List<_FocusSession> sessions;
+
+  const _DetailView({required this.sessions});
+
+  @override
+  Widget build(BuildContext context) {
+    if (sessions.isEmpty) {
+      return const Center(
+        child:
+            Text('Henüz tamamlanan oturum yok', style: TextStyle(fontSize: 10)),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.only(top: 16),
+      itemCount: sessions.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final session = sessions[index];
+        final date =
+            '${session.completedAt.day.toString().padLeft(2, '0')}.${session.completedAt.month.toString().padLeft(2, '0')}.${session.completedAt.year}';
+        final time =
+            '${session.completedAt.hour.toString().padLeft(2, '0')}:${session.completedAt.minute.toString().padLeft(2, '0')}';
+        return ListTile(
+          dense: true,
+          leading: Image.asset('assets/asset-sheet_slices/list.jpg',
+              width: 25, height: 25),
+          title: Text(date, style: const TextStyle(fontSize: 10)),
+          subtitle: Text(time,
+              style: const TextStyle(fontSize: 8, color: Colors.grey)),
+          trailing: Text('${session.durationMinutes} dk',
+              style: const TextStyle(fontSize: 10)),
+        );
+      },
     );
   }
 }
@@ -582,14 +864,19 @@ class _AssetButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Image.asset(asset, width: 42, height: 42, fit: BoxFit.contain),
-          if (label != null) Text(label!, style: const TextStyle(fontSize: 10)),
-        ],
+    return Semantics(
+      label: label ?? 'Rapor',
+      button: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(asset, width: 42, height: 42, fit: BoxFit.contain),
+            if (label != null)
+              Text(label!, style: const TextStyle(fontSize: 10)),
+          ],
+        ),
       ),
     );
   }
