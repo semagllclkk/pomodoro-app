@@ -572,6 +572,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                         Row(
                           children: [
                             Expanded(
+                              flex: 2,
                               child: _PixelButton(
                                 text: isRunning ? 'DURDUR' : 'BAŞLA',
                                 onPressed: isRunning ? stopTimer : startTimer,
@@ -580,11 +581,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                                     'assets/asset-sheet_slices/pomodoro-start.jpg',
                               ),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
+                            const SizedBox(width: 8),
                             Expanded(
                               child: _PixelButton(
                                 text: null,
@@ -605,17 +602,17 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                                     'assets/asset-sheet_slices/ileri-sar.jpg',
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _PixelButton(
-                                text: 'SIFIRLA',
-                                onPressed: resetTimer,
-                                color: const Color(0xFFFF6B6B),
-                                asset:
-                                    'assets/asset-sheet_slices/pomodoro-end.jpg',
-                              ),
-                            ),
                           ],
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: _PixelButton(
+                            text: 'SIFIRLA',
+                            onPressed: resetTimer,
+                            color: const Color(0xFFFF6B6B),
+                            asset: 'assets/asset-sheet_slices/pomodoro-end.jpg',
+                          ),
                         ),
                         const SizedBox(height: 20),
                         SizedBox(
@@ -722,17 +719,19 @@ class _ReportDialog extends StatelessWidget {
           height: 440,
           child: Column(
             children: [
-              const TabBar(
+              TabBar(
                 labelColor: Color(0xFFE56B77),
                 unselectedLabelColor: Colors.grey,
                 tabs: [
                   Tab(
-                      icon: ImageIcon(AssetImage(
-                          'assets/asset-sheet_slices/istatistik.jpg')),
+                      icon: Image.asset(
+                          'assets/asset-sheet_slices/istatistik.jpg',
+                          width: 30,
+                          height: 30),
                       text: 'Özet'),
                   Tab(
-                      icon: ImageIcon(
-                          AssetImage('assets/asset-sheet_slices/list.jpg')),
+                      icon: Image.asset('assets/asset-sheet_slices/list.jpg',
+                          width: 30, height: 30),
                       text: 'Detay'),
                 ],
               ),
