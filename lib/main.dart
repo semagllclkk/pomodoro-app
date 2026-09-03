@@ -482,12 +482,14 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                       asset: 'assets/asset-sheet_slices/istatistik.jpg',
                       onTap: openReport,
                       semanticsLabel: 'Rapor',
+                      size: 34,
                     ),
                     const SizedBox(width: 8),
                     _AssetButton(
                       asset: 'assets/asset-sheet_slices/settings.jpg',
                       onTap: openSettings,
                       semanticsLabel: 'Ayarlar',
+                      size: 34,
                     ),
                   ],
                 ),
@@ -504,13 +506,13 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                           tag: 'app-hero',
                           child: Image.asset(
                             currentAsset,
-                            width: 240,
-                            height: 240,
+                            width: 220,
+                            height: 220,
                             fit: BoxFit.contain,
                             errorBuilder: (c, e, s) => const SizedBox.shrink(),
                           ),
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 12),
                         // Blink label OR normal status text
                         if (label != null)
                           AnimatedOpacity(
@@ -530,11 +532,11 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                                 fontSize: 24, color: Colors.white),
                             textAlign: TextAlign.center,
                           ),
-                        const SizedBox(height: 30),
+                        const SizedBox(height: 20),
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(
-                              vertical: 20, horizontal: 20),
+                              vertical: 14, horizontal: 16),
                           decoration: BoxDecoration(
                             color: const Color(0xFFFFC0CB),
                             borderRadius: BorderRadius.circular(20),
@@ -550,7 +552,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                           child: Row(
                             children: [
                               Image.asset('assets/asset-sheet_slices/saat.jpg',
-                                  width: 34, height: 34),
+                                  width: 30, height: 30),
                               const SizedBox(width: 8),
                               Flexible(
                                 child: FittedBox(
@@ -559,9 +561,9 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                                   child: Text(
                                     timerText,
                                     style: const TextStyle(
-                                        fontSize: 48,
+                                        fontSize: 42,
                                         color: Colors.white,
-                                        letterSpacing: 4),
+                                        letterSpacing: 3),
                                   ),
                                 ),
                               ),
@@ -605,30 +607,33 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                           ],
                         ),
                         const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: _PixelButton(
-                            text: 'SIFIRLA',
-                            onPressed: resetTimer,
-                            color: const Color(0xFFFF6B6B),
-                            asset: 'assets/asset-sheet_slices/pomodoro-end.jpg',
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        SizedBox(
-                          width: double.infinity,
-                          child: _PixelButton(
-                            text: 'MOLA TEST',
-                            onPressed: () {
-                              stopTimer();
-                              setState(() {
-                                currentState = 'onBreak';
-                                timeLeft = configuredBreakMinutes * 60;
-                              });
-                            },
-                            color: const Color(0xFF87CEEB),
-                            asset: 'assets/asset-sheet_slices/mola.jpg',
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _PixelButton(
+                                text: 'SIFIRLA',
+                                onPressed: resetTimer,
+                                color: const Color(0xFFFF6B6B),
+                                asset:
+                                    'assets/asset-sheet_slices/pomodoro-end.jpg',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _PixelButton(
+                                text: 'MOLA TEST',
+                                onPressed: () {
+                                  stopTimer();
+                                  setState(() {
+                                    currentState = 'onBreak';
+                                    timeLeft = configuredBreakMinutes * 60;
+                                  });
+                                },
+                                color: const Color(0xFF87CEEB),
+                                asset: 'assets/asset-sheet_slices/mola.jpg',
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 12),
                       ],
@@ -956,12 +961,14 @@ class _AssetButton extends StatelessWidget {
   final VoidCallback onTap;
   final String? label;
   final String? semanticsLabel;
+  final double size;
 
   const _AssetButton({
     required this.asset,
     required this.onTap,
     this.label,
     this.semanticsLabel,
+    this.size = 42,
   });
 
   @override
@@ -974,7 +981,7 @@ class _AssetButton extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Image.asset(asset, width: 42, height: 42, fit: BoxFit.contain),
+            Image.asset(asset, width: size, height: size, fit: BoxFit.contain),
             if (label != null)
               Text(label!, style: const TextStyle(fontSize: 10)),
           ],
