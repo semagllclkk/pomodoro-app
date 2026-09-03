@@ -242,6 +242,37 @@ class _PomodoroScreenState extends State<PomodoroScreen>
     });
   }
 
+  void skipPhase() {
+    _playClick();
+    if (currentState == 'idle') return;
+    timer?.cancel();
+    _stopBlink();
+    setState(() {
+      if (currentState == 'working') {
+        currentState = 'onBreak';
+        timeLeft = configuredBreakMinutes * 60;
+        isRunning = true;
+      } else {
+        currentState = 'idle';
+        timeLeft = configuredWorkMinutes * 60;
+        isRunning = false;
+      }
+    });
+    if (isRunning) {
+      startTimer();
+    }
+  }
+
+  void fastForward() {
+    _playClick();
+    if (currentState == 'idle') return;
+    if (timeLeft > 60) {
+      setState(() => timeLeft -= 60);
+      return;
+    }
+    skipPhase();
+  }
+
   void openSettings() {
     _playClick();
     showDialog<void>(
@@ -517,7 +548,29 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                           asset: 'assets/asset-sheet_slices/pomodoro-start.jpg',
                         ),
                       ),
-                      const SizedBox(width: 12),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _PixelButton(
+                          text: 'ATLA',
+                          onPressed: skipPhase,
+                          color: const Color(0xFFB98AD9),
+                          asset: 'assets/asset-sheet_slices/atla.jpg',
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _PixelButton(
+                          text: 'İLERİ SAR',
+                          onPressed: fastForward,
+                          color: const Color(0xFF8EBCD1),
+                          asset: 'assets/asset-sheet_slices/ileri-sar.jpg',
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: _PixelButton(
                           text: 'SIFIRLA',
@@ -548,6 +601,7 @@ class _PomodoroScreenState extends State<PomodoroScreen>
                   _AssetButton(
                     asset: 'assets/asset-sheet_slices/istatistik.jpg',
                     onTap: openReport,
+                    semanticsLabel: 'Rapor',
                   ),
                   const SizedBox(height: 4),
                   _AssetButton(
@@ -619,17 +673,16 @@ class _ReportDialog extends StatelessWidget {
     return DefaultTabController(
       length: 2,
       child: AlertDialog(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFFFFE6EA),
         titlePadding: const EdgeInsets.fromLTRB(18, 12, 10, 0),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('RAPOR', style: TextStyle(fontSize: 16)),
-            IconButton(
-              icon: const Icon(Icons.close, size: 18),
-              onPressed: () => Navigator.pop(context),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
+            _AssetButton(
+              asset: 'assets/asset-sheet_slices/ret.png',
+              onTap: () => Navigator.pop(context),
+              semanticsLabel: 'Kapat',
             ),
           ],
         ),
@@ -648,7 +701,7 @@ class _ReportDialog extends StatelessWidget {
                       text: 'Özet'),
                   Tab(
                       icon: ImageIcon(
-                          AssetImage('assets/asset-sheet_slices/detail.jpg')),
+                          AssetImage('assets/asset-sheet_slices/list.jpg')),
                       text: 'Detay'),
                 ],
               ),
@@ -859,13 +912,19 @@ class _AssetButton extends StatelessWidget {
   final String asset;
   final VoidCallback onTap;
   final String? label;
+  final String? semanticsLabel;
 
-  const _AssetButton({required this.asset, required this.onTap, this.label});
+  const _AssetButton({
+    required this.asset,
+    required this.onTap,
+    this.label,
+    this.semanticsLabel,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: label ?? 'Rapor',
+      label: semanticsLabel ?? label ?? 'Buton',
       button: true,
       child: GestureDetector(
         onTap: onTap,

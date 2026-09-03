@@ -14,6 +14,9 @@ void main() {
     await tester.pumpWidget(const PixelPomodoroApp());
     expect(find.text('BAŞLAMAYA HAZIR'), findsOneWidget);
     expect(find.text('25:00'), findsOneWidget);
+    expect(find.text('ATLA'), findsOneWidget);
+    expect(find.text('İLERİ SAR'), findsOneWidget);
+    expect(find.text('SIFIRLA'), findsOneWidget);
   });
 
   testWidgets('Report opens with summary and detail tabs',
